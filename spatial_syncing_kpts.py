@@ -69,6 +69,16 @@ for subject in subjects_dirs:
                 except Exception as e:
                     print(f'Error: {e}')
                     continue
+                lag_file_name = f"lag_correlation_{movement}.txt" # lag_correlation_{video_file}.txt
+                lag_file_path = os.path.join(movement_path, 'OpenSim', 'IK', 'shiftedIK', lag_file_name)
+                if not os.path.exists(lag_file_path):
+                    continue
+                with open(lag_file_path, 'r') as file:
+                    # the lag is as the following: Lag : 0.000000. the correlation is the next line and as the following: Correlation : 0.999999
+                    lag = float(file.readline().split(':')[-1])
+                    correlation = float(file.readline().split(':')[-1])
+
+
 
 
                 # shifted_dir = os.path.join(marker_mocap_path, 'shiftedMarkers')
