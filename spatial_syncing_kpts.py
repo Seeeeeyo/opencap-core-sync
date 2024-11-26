@@ -78,23 +78,12 @@ for subject in subjects_dirs:
                     lag = float(file.readline().split(':')[-1])
                     correlation = float(file.readline().split(':')[-1])
 
+                # TODO: Shift using lag from above, trim to mocap length, interpolate so the mono time vector is the same as the mocap time vector.
 
+                # TODO rotational aligment
 
+                # TODO translation aligment
 
-                # shifted_dir = os.path.join(marker_mocap_path, 'shiftedMarkers')
-                # if not os.path.exists(shifted_dir):
-                #     os.makedirs(shifted_dir)
-                #
-                # # delete all files in the shifted dir
-                # for file in os.listdir(shifted_dir):
-                #     os.remove(os.path.join(shifted_dir, file))
-                #
-                # video_dirs = os.listdir(marker_video_path)
-                #
-                # for video_dir in video_dirs:
-                #     video_dir_path = os.path.join(marker_video_path, video_dir)
-                #     video_mot_files = [f for f in os.listdir(video_dir_path) if f.endswith('.mot')]
-                #     modified_video_mot_files = [f.split('_')[0] + '.mot' for f in video_mot_files]
-                #
-                #     for i, modified_video_file in enumerate(modified_video_mot_files):
-                #         print(f'Processing {subject} - {session} - {camera} - {movement} - {video_dir} - {modified_video_file} ...')
+                # TODO write market errors to file
+
+                # TODO write the aligned mono data to file _sync.trc
