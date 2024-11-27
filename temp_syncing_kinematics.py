@@ -128,14 +128,37 @@ for subject in subjects_dirs:
                         mocap_df = pd.DataFrame(mocap_data)
                         video_df = pd.DataFrame(video_data)
 
+                        # Convert the 'time' column to Timedelta and set it as the index
+                        video_df['time_'] = pd.to_timedelta(video_df['time'], unit='s')
+                        video_df = video_df.set_index('time_')
+
+                        # Upsample the data to 100Hz
+                        target_freq = '10ms'  # 100Hz = 10ms intervals
+                        video_df = video_df.resample(target_freq).interpolate(method="linear")
+
+                        # Reset the index to make the time column accessible
+                        video_df = video_df.reset_index()
+
+                        # Convert 'time_' back to seconds
+                        video_df['time'] = video_df['time_'].dt.total_seconds()
+
+                        # # Rearrange the columns, renaming them for clarity
+                        # video_df_100hz_reset = video_df_100hz_reset[['time', 'value']]
+
+                        # round the time column to 2 decimal places
+                        video_df['time'] = video_df['time'].round(2)
+
+                        # delete the time_ column
+                        video_df = video_df.drop(columns=['time_'])
+
                         knee_ankle_columns = ['knee_angle_r', 'knee_angle_l', 'ankle_angle_r', 'ankle_angle_l']
                         mocap_knee_ankle = mocap_df[knee_ankle_columns].values.T
                         video_knee_ankle = video_df[knee_ankle_columns].values.T
 
                         print("Y1 is mocap, Y2 is video")
-                        mocap_knee_ankle, video_knee_ankle = pad_signals(mocap_knee_ankle, video_knee_ankle)
+                        mocap_knee_ankle_padded, video_knee_ankle_padded = pad_signals(mocap_knee_ankle, video_knee_ankle)
 
-                        max_corr, lag = cross_corr_multiple_timeseries(mocap_knee_ankle, video_knee_ankle,
+                        max_corr, lag = cross_corr_multiple_timeseries(mocap_knee_ankle_padded, video_knee_ankle_padded,
                                                                        visualize=False)
 
                         max_corr = round(max_corr, 3)
@@ -172,15 +195,6 @@ for subject in subjects_dirs:
                             fig_s.write_html(
                                 os.path.join(shifted_dir, f'lag_correlation_single_{modified_video_file}.html'))
 
-                            # same but with matplotlib
-                            fig, ax = plt.subplots()
-                            ax.plot(shifted_mocap_df.index, shifted_mocap_df['knee_angle_r'], label='Mocap')
-                            ax.plot(shifted_mocap_df.index, shifted_video_df['knee_angle_r'], label='Video')
-                            ax.set_title(f'Mocap vs Video Knee Angle Right - {movement} - {video_dir}')
-                            ax.set_xlabel('Index')
-                            ax.set_ylabel('Angle (deg)')
-                            ax.legend()
-                            plt.savefig(os.path.join(shifted_dir, f'lag_correlation_single_{modified_video_file}.png'))
                         if multi_plot:
 
                             # shifted
