@@ -2200,7 +2200,7 @@ def cross_corr(y1, y2,multCorrGaussianStd=None,visualize=False, dataForReproj=No
 
 
 # %%
-def cross_corr_multiple_timeseries(Y1, Y2,multCorrGaussianStd=None,dataForReproj=None,visualize=False,frameRate=60, path=None):
+def cross_corr_multiple_timeseries(Y1, Y2,multCorrGaussianStd=None,dataForReproj=None,visualize=False,frameRate=60, path=None, approximateLag=None):
     """
     GPT generated docstring.
     Calculates the cross-correlation and lag for multiple timeseries without normalization.
@@ -2352,11 +2352,29 @@ def cross_corr_multiple_timeseries(Y1, Y2,multCorrGaussianStd=None,dataForReproj
             if path is not None:
                 plt.savefig(os.path.join(path, 'cross_corr_multiple_timeseries_multCorrGaussianStd.png'))
 
-    argmax_corr = np.argmax(summedCorr)
-    max_corr = np.nanmax(summedCorr)/corrMat.shape[0] 
-    
-    lag = argmax_corr-shift
-    return max_corr, lag
+    _, peaks = find_peaks(summedCorr, height=.75)
+    idxPeaks = np.squeeze(
+        np.asarray([np.argwhere(peaks['peak_heights'][i] == summedCorr) for i in range(len(peaks['peak_heights']))]))
+    lags = idxPeaks - shift
+    # look at 3 lags closest to 0
+    # print("Lags: ", lags)
+    # print('type(lags): ', type(lags))
+    # print("summedCorr[lags + shift]", summedCorr[lags + shift])
+    if not isinstance(lags, np.ndarray):
+        return summedCorr[lags + shift], lags
+
+    if approximateLag is not None:
+        # sort the lags by the difference between the approximate lag and the lag
+        if isinstance(lags, np.ndarray):
+            sorted_lags = lags[np.argsort(np.abs(lags - approximateLag))]
+            return summedCorr[sorted_lags[0] + shift], sorted_lags[0]
+
+    # if len(lags) > 3:
+    #     lags = lags[np.argsort(np.abs(lags))[:3]]
+    #     # take the lag with the highest peak
+    #     lags = lags[np.argsort(peaks['peak_heights'])[::-1]]
+    #     max_corr = summedCorr[lags[0] + shift]
+    #     return max_corr, lags[0]
 
 # %% Triangulation
 # If you set ignoreMissingMarkers to True, and pass the DISTORTED keypoints
