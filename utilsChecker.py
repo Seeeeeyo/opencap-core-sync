@@ -2200,20 +2200,38 @@ def cross_corr(y1, y2,multCorrGaussianStd=None,visualize=False, dataForReproj=No
 
 
 # %%
-def cross_corr_multiple_timeseries(Y1, Y2,multCorrGaussianStd=None,dataForReproj=None,visualize=False,frameRate=60):
-    
-    # SHAPE OF Y1,Y2 is nMkrs by nSamples
-    """Calculates the cross correlation and lags without normalization.
-    
-    The definition of the discrete cross-correlation is in:
-    https://www.mathworks.com/help/matlab/ref/xcorr.html
-    
+def cross_corr_multiple_timeseries(Y1, Y2,multCorrGaussianStd=None,dataForReproj=None,visualize=False,frameRate=60, path=None):
+    """
+    GPT generated docstring.
+    Calculates the cross-correlation and lag for multiple timeseries without normalization.
+
+    This function computes the cross-correlation between two sets of time-series data (Y1 and Y2),
+    optionally applies Gaussian weighting to the correlation, and can refine the lag estimation using reprojection error.
+
     Args:
-    y1, y2: Should have the same length.
-    
+        Y1 (np.ndarray): A 2D array of shape (nMkrs, nSamples) representing the first set of time-series data.
+        Y2 (np.ndarray): A 2D array of shape (nMkrs, nSamples) representing the second set of time-series data.
+        multCorrGaussianStd (float, optional): Standard deviation for a Gaussian to prioritize correlation peaks near zero lag.
+            If None, no Gaussian weighting is applied.
+        dataForReproj (dict, optional): Data for reprojection error minimization. Should include:
+            - 'CamParamList': List of camera parameters.
+            - 'keypointList': List of detected keypoints.
+            - 'cams2UseReproj': Cameras to use for reprojection.
+            - 'confidence': Confidence scores for keypoints.
+            - 'cameras2Use': Cameras being used for synchronization.
+        visualize (bool, optional): Whether to plot intermediate results (default is False).
+        frameRate (int, optional): Frame rate of the timeseries data (default is 60).
+        path (str, optional): Path to save visualizations. Must end with a '/'.
+
     Returns:
-    max_corr: Maximum correlation without normalization.
-    lag: The lag in terms of the index.
+        max_corr (float): Maximum correlation value.
+        lag (int): The lag (in frames) corresponding to the maximum correlation.
+
+    Notes:
+        - The definition of cross-correlation is consistent with the MATLAB `xcorr` function.
+        - If `dataForReproj` is provided, the lag is refined based on reprojection error minimization.
+        - If `multCorrGaussianStd` is provided, a Gaussian weighting is applied to prioritize lag solutions near zero.
+
     """
     nMkrs = Y1.shape[0]
     corrMat = np.empty(Y1.shape)
@@ -2247,10 +2265,14 @@ def cross_corr_multiple_timeseries(Y1, Y2,multCorrGaussianStd=None,dataForReproj
         legNames = ['mkr' + str(iMkr) for iMkr in range(nMkrs)]
         legNames.append('summedCorrelation')
         plt.legend(legNames)
+        # save the plot
+        if path is not None:
+            plt.savefig(os.path.join(path + 'cross_corr_multiple_timeseries_.png'))
         
         plt.figure()
         plt.plot(Y1.T)
         plt.plot(Y2.T)
+
     
     summedCorr = np.nansum(corrMat,axis=0)
     
@@ -2319,6 +2341,7 @@ def cross_corr_multiple_timeseries(Y1, Y2,multCorrGaussianStd=None,dataForReproj
                 plt.legend(['reprojection error','corr lag','refined lag'])
                 plt.show()
 
+
             return max_corr, lag
         
     # Multiply correlation curve by gaussian (prioritizing lag solution closest to 0)
@@ -2326,7 +2349,9 @@ def cross_corr_multiple_timeseries(Y1, Y2,multCorrGaussianStd=None,dataForReproj
         summedCorr = np.multiply(summedCorr,gaussian(len(summedCorr),multCorrGaussianStd))
         if visualize: 
             plt.plot(summedCorr,color=(.4,.4,.4))
-    
+            if path is not None:
+                plt.savefig(os.path.join(path, 'cross_corr_multiple_timeseries_multCorrGaussianStd.png'))
+
     argmax_corr = np.argmax(summedCorr)
     max_corr = np.nanmax(summedCorr)/corrMat.shape[0] 
     
