@@ -12,6 +12,54 @@ import re
 from utils_trc import write_trc
 
 
+def get_metric(marker_data):
+    if marker_data > 100:
+        metric_mocap = 'mm'
+    elif marker_data > 1:
+        metric_mocap = 'cm'
+    else:
+        metric_mocap = 'm'
+
+    return metric_mocap
+
+
+def convert_to_metric(df, current_metric, target_metric):
+    """
+    Convert all columns besides 'Time' and 'Frame#' from the original metric to the target metric.
+
+    Parameters:
+        df : pd.DataFrame
+            DataFrame containing marker position data.
+        current_metric : str
+            The current metric of the data ('mm', 'cm', 'm').
+        target_metric : str
+            The target metric to convert the data to ('mm', 'cm', 'm').
+
+    Returns:
+        pd.DataFrame
+            DataFrame with converted marker position data.
+    """
+    conversion_factors = {
+        ('mm', 'cm'): 0.1,
+        ('mm', 'm'): 0.001,
+        ('cm', 'mm'): 10,
+        ('cm', 'm'): 0.01,
+        ('m', 'mm'): 1000,
+        ('m', 'cm'): 100,
+    }
+
+    if current_metric == target_metric:
+        return df
+
+    factor = conversion_factors.get((current_metric, target_metric))
+    if factor is None:
+        raise ValueError(f"Unsupported conversion from {current_metric} to {target_metric}")
+
+    columns_to_convert = [col for col in df.columns if col not in ['Time', 'Frame#']]
+    df[columns_to_convert] = df[columns_to_convert] * factor
+    print(f"Converted {current_metric} to {target_metric}")
+    return df
+
 def clean_column_names(df):
     """
     Clean the column names of a DataFrame by removing trailing numbers from marker suffixes,
@@ -39,6 +87,23 @@ def clean_column_names(df):
             new_column_names[col] = col.lower()
     df = df.rename(columns=new_column_names)
     return df
+
+
+def extract_marker_names(df):
+    """
+    Extract the marker names from the column names of a DataFrame.
+
+    Parameters:
+        df : pd.DataFrame
+            DataFrame containing marker position data with `X`, `Y`, and `Z` columns.
+
+    Returns:
+        list
+            List of unique marker names.
+    """
+    marker_columns = [col for col in df.columns if re.search(r"-[XYZ]$", col)]
+    marker_names = list(set(re.sub(r"-[XYZ]$", "", col) for col in marker_columns))
+    return marker_names
 
 
 def extract_alpha_chars(s):
@@ -82,7 +147,7 @@ def compute_marker_errors(rotated_marker_video_data, marker_mocap_data_trimmed):
             if video_alpha == mocap_alpha:
                 common_markers.add((video_marker, mocap_marker))
                 break
-    print(f"Common Markers: {common_markers}")
+    # print(f"Common Markers: {common_markers}")
 
     # Find unmatched markers
     matched_video_markers = {pair[0] for pair in common_markers}
@@ -97,8 +162,8 @@ def compute_marker_errors(rotated_marker_video_data, marker_mocap_data_trimmed):
     unmatched_mocap_markers.discard("Time")
     unmatched_mocap_markers.discard("Frame#")
 
-    print(f"Unmatched Video Markers: {unmatched_video_markers}")
-    print(f"Unmatched Mocap Markers: {unmatched_mocap_markers}")
+    # print(f"Unmatched Video Markers: {unmatched_video_markers}")
+    # print(f"Unmatched Mocap Markers: {unmatched_mocap_markers}")
 
     # base_common_pairs is a set of common markers from common_markers but without the suffixes -X, -Y, -Z
     base_common_pairs = set()
@@ -107,6 +172,8 @@ def compute_marker_errors(rotated_marker_video_data, marker_mocap_data_trimmed):
         pair_1 = pair[1][:-2]
         if len(pair_0) > 1:
             base_common_pairs.add((pair_0, pair_1))
+
+    # print(f"Base Common Pairs: {base_common_pairs}")
 
     for marker in base_common_pairs:
         video_marker_base = marker[0]
@@ -203,6 +270,8 @@ def read_trc_file(file_path):
     # Drop the first row
     data = data.drop(0)
 
+    # marker_names = extract_marker_names(data)
+
     # clean the column names
     cleaned_data = clean_column_names(data)
 
@@ -244,6 +313,8 @@ def main():
                     if not marker_video_subdirs:
                         continue
 
+                    print(f"Filepath: {marker_video_path}")
+
                     marker_video_path = os.path.join(marker_video_path, marker_video_subdirs[0])
                     marker_video_files = [
                         f for f in os.listdir(marker_video_path) if f.endswith(".trc")
@@ -268,6 +339,9 @@ def main():
                     except Exception as e:
                         print(f"Error: {e}")
                         continue
+
+                    mono_marker_names = extract_marker_names(marker_video_data)
+                    mocap_marker_names = extract_marker_names(marker_mocap_data)
 
                     lag_file_name = f"lag_correlation_{movement}.txt"
                     lag_file_path = os.path.join(
@@ -359,6 +433,32 @@ def main():
                     marker_mocap_data_trimmed = marker_mocap_data[
                         marker_mocap_data["Time"].isin(time_video)
                     ]
+
+                    # get the knee angle of the first frame of the mocap data
+                    right_knee_mocap = "r_knee"
+                    right_knee_mono = "r_knee"
+
+                    r_kneemocap_first = abs(marker_mocap_data_trimmed[f"{right_knee_mocap}-Y"].iloc[0])
+                    metric_mocap = get_metric(r_kneemocap_first)
+                    print(f"Metric of mocap data: {metric_mocap}")
+
+                    r_kneemono_first = abs(shifted_video_data[f"{right_knee_mono}-Y"].iloc[0])
+                    metric_mono = get_metric(r_kneemono_first)
+                    print(f"Metric of video data: {metric_mono}")
+
+                    if metric_mocap != 'mm':
+                        marker_mocap_data_trimmed = convert_to_metric(marker_mocap_data_trimmed, metric_mocap, 'mm')
+                        r_kneemocap_first = abs(marker_mocap_data_trimmed[f"{right_knee_mocap}-Y"].iloc[0])
+                        metric_mocap = get_metric(r_kneemocap_first)
+                        assert metric_mocap == 'mm'
+
+                    if metric_mono != 'mm':
+                        shifted_video_data = convert_to_metric(shifted_video_data, metric_mono, metric_mocap)
+                        r_kneemono_first = abs(shifted_video_data[f"{right_knee_mono}-Y"].iloc[0])
+                        metric_mono = get_metric(r_kneemono_first)
+                        assert metric_mono == 'mm'
+
+
 
                     # rotational alignment
                     # Calculate midpoints for mono
@@ -714,7 +814,7 @@ def main():
                     marker_errors, average_error = compute_marker_errors(
                         rotated_marker_video_data, marker_mocap_data_trimmed
                     )
-                    print(f"Marker Errors: {marker_errors}")
+                    # print(f"Marker Errors: {marker_errors}")
                     print(f"Average Error: {average_error:.2f}")
 
                     # export the marker errors to a csv
