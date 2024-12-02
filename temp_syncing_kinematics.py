@@ -188,14 +188,25 @@ if not single_file:
                         continue
                     # list the folder in the move path
                     mov_dir = os.listdir(mov_path)
+
                     if len(mov_dir) == 0:
                         continue
-                    mov = mov_dir[0]
+                    elif len(mov_dir) == 1:
+                        mov = mov_dir[0]
+                    # if one of the folders contains 'trimmed' in its name, only keep that folder
+                    elif any('trimmed' in folder for folder in mov_dir):
+                        mov = [folder for folder in mov_dir if 'trimmed' in folder][0]
+                    else:
+                        continue
 
                     movement_path = os.path.join(subject_path, session, camera, movement, mov)
                     openSim_video_path = os.path.join(movement_path, 'OpenSim')
                     video_ik_path = os.path.join(openSim_video_path, 'IK')
 
+                    # if camera == 'Cam1':
+                    #     if 'walking2' in video_ik_path:
+                    #         if session == 'Session1':
+                    #             breakpoint()
 
                     # if '/home/selim/opencap-mono/output/subject6/Session1/Cam1/walking3/' in video_ik_path:
                     #     breakpoint()
