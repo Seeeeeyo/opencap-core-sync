@@ -47,6 +47,23 @@ class TRCFile(object):
             for k, v in kwargs.items():
                 setattr(self, k, v)
 
+
+    def copy(self):
+        """Create a copy of the TRCFile object."""
+        return TRCFile(
+            marker_names=self.marker_names.copy(),
+            data_rate=self.data_rate,
+            camera_rate=self.camera_rate,
+            num_frames=self.num_frames,
+            num_markers=self.num_markers,
+            units=self.units,
+            orig_data_rate=self.orig_data_rate,
+            orig_data_start_frame=self.orig_data_start_frame,
+            orig_num_frames=self.orig_num_frames,
+            data=self.data.copy(),
+            time=self.time.copy()
+        )
+
     def read_from_file(self, fpath):
         # Read the header lines / metadata.
         # ---------------------------------
@@ -282,6 +299,262 @@ class TRCFile(object):
             else:
                 raise ValueError("Axis not recognized")
 
+    def resample_trc(self, target_frequency=100):
+        """
+        Resample the TRC data to a target frequency.
+
+        Parameters:
+            trc_mono: TRCFile
+                The TRC object containing the data and time information.
+            target_frequency: int
+                The desired frequency (e.g., 100 for 100 Hz).
+
+        Returns:
+            dict
+                A dictionary containing the resampled time and data.
+        """
+        from scipy.interpolate import interp1d
+        original_data = self.data
+        original_time = original_data["time"]
+
+        # Define new time vector based on the target frequency
+        start_time = original_time[0]
+        end_time = original_time[-1]
+        new_time = np.arange(start_time, end_time, 1 / target_frequency)
+
+        # Extract numerical data for interpolation (excluding frame_num and time)
+        numeric_fields = [field for field in original_data.dtype.names if field not in ["frame_num", "time"]]
+        numeric_data = np.vstack([original_data[field] for field in numeric_fields]).T
+
+        # Interpolate the entire array at once
+        f_interp = interp1d(original_time, numeric_data, axis=0, kind='linear', fill_value="extrapolate")
+        interpolated_numeric_data = f_interp(new_time)
+
+        # Combine frame numbers, time, and interpolated numeric data
+        frame_numbers = np.arange(1, len(new_time) + 1)  # Generate new frame numbers
+        combined_data = np.column_stack((frame_numbers, new_time, interpolated_numeric_data))
+
+        # Convert each row to a tuple
+        dtype = [(name, original_data.dtype[name]) for name in original_data.dtype.names]
+        interpolated_data_tuples = np.array([tuple(row) for row in combined_data], dtype=dtype)
+
+        self.data = interpolated_data_tuples
+        self.camera_rate = target_frequency
+        self.data_rate = int(target_frequency)
+        self.time = new_time
+        self.num_frames = len(new_time)
+        # TODO check if this is needed
+        # self.orig_num_frames = len(new_time)
+        # self.orig_data_rate = target_frequency
+        # self.orig_data_start_frame = 1
+
+
+    def convert_to_metric_trc(self, current_metric, target_metric):
+        """
+        Convert all marker position columns in a TRC NumPy structured array
+        from the original metric to the target metric.
+
+        Parameters:
+            current_metric : str
+                The current metric of the data ('mm', 'cm', 'm').
+            target_metric : str
+                The target metric to convert the data to ('mm', 'cm', 'm').
+
+        Returns:
+            None
+        """
+        if not hasattr(self, 'data') or not isinstance(self.data, np.ndarray):
+            raise ValueError("TRC object must have a 'data' attribute as a NumPy structured array.")
+
+        data = self.data
+        conversion_factors = {
+            ('mm', 'cm'): 0.1,
+            ('mm', 'm'): 0.001,
+            ('cm', 'mm'): 10,
+            ('cm', 'm'): 0.01,
+            ('m', 'mm'): 1000,
+            ('m', 'cm'): 100,
+        }
+
+        if current_metric == target_metric:
+            print("Current metric is already the target metric. No conversion performed.")
+            return
+
+        factor = conversion_factors.get((current_metric, target_metric))
+        if factor is None:
+            raise ValueError(f"Unsupported conversion from {current_metric} to {target_metric}")
+
+        # Identify marker columns (exclude 'time' and 'frame_num')
+        marker_columns = [col for col in data.dtype.names if col not in ['frame_num', 'time']]
+
+        # Apply conversion factor to marker columns
+        for col in marker_columns:
+            data[col] *= factor
+
+        print(f"Converted {current_metric} to {target_metric}.")
+        self.units = target_metric
+
+    def get_frequency(self):
+        """
+        Get the frequency of the TRC data.
+
+        Returns:
+            int
+                The frequency of the data in Hz.
+        """
+        return int(self.data_rate)
+
+    def get_metric_trc(self):
+        """
+        Determine the metric of the TRC data based on marker positions.
+
+        Returns:
+            str
+                The detected metric of the data ('mm', 'cm', 'm').
+        """
+        # Extract marker columns (exclude 'frame_num' and 'time')
+        marker_columns = [col for col in self.data.dtype.names if col not in ['frame_num', 'time']]
+
+        # Flatten all marker data into one array to assess its range
+        marker_data = np.concatenate([self.data[col] for col in marker_columns])
+
+        # Determine the metric based on the maximum value
+        max_marker_value = np.max(np.abs(marker_data))  # Use absolute values for robustness
+        if max_marker_value > 100:
+            metric = 'mm'
+        elif max_marker_value > 1:
+            metric = 'cm'
+        else:
+            metric = 'm'
+
+        return metric
+
+    def shift_data_by_lag(self, lag, target_length):
+        """
+        Shift the TRC data based on a given lag and update self.data.
+
+        Parameters:
+            lag : int
+                The lag in frames. Positive values indicate a forward shift,
+                and negative values indicate a backward shift.
+            target_length : int
+                The length of the resulting data after the shift (e.g., mocap data length).
+
+        Returns:
+            None
+        """
+        num_frames = self.data.shape[0]  # Total number of frames in the current data
+
+        if lag > 0:
+            # start_idx = lag
+            end_idx = min(num_frames + lag, target_length)
+            self.data = self.data[:end_idx - lag]
+        elif lag < 0:
+            # start_idx = 0
+            end_idx = min(num_frames, target_length + lag)
+            self.data = self.data[-lag:end_idx - lag]
+        else:
+            # start_idx = 0
+            end_idx = min(num_frames, target_length)
+            self.data = self.data[:end_idx]
+
+        # Ensure self.data retains the same dtype
+        self.data = np.array(self.data, dtype=self.data.dtype)
+
+    def get_start_end_times(self):
+        start = self.time[0]
+        end = self.time[-1]
+
+        return start, end
+
+
+    def add_time_offset(self, offset):
+        self.time += offset
+        self.data['time'] += offset
+
+
+    def trim_to_match(self, start_time, end_time):
+        """
+        Trim the TRC data to match the start and end times.
+
+        Parameters:
+            start_time : float
+                The start time in seconds.
+            end_time : float
+                The end time in seconds.
+
+        Returns:
+            None
+        """
+        # Find the indices of the start and end times
+        start_idx = np.argmin(np.abs(self.time - start_time))
+        if end_time > self.time[-1]:
+            end_idx = len(self.time) - 1
+        else:
+            end_idx = np.argmin(np.abs(self.time - end_time))
+
+        # Trim the data
+        self.data = self.data[start_idx:end_idx + 1]
+        self.time = self.time[start_idx:end_idx + 1]
+        self.num_frames = len(self.data)
+        self.num_markers = len(self.marker_names)
+        self.orig_num_frames = len(self.data)
+        self.orig_data_start_frame = 1
+
+
+    def get_marker_names(self):
+        return self.marker_names
+
+    def tuple_to_numpy(self):
+        # Convert from ndarray (num_frames,) where each element is a tuple of num_markers x 3 to np array (num_frames, num_markers*3). Skip 'frame_num' and 'time'
+        data = np.zeros((self.num_frames, self.num_markers * 3))
+        for i, row in enumerate(self.data):
+            concatenated_row = np.concatenate(
+                [np.array(row[col]) for col in self.data.dtype.names if col not in ['frame_num', 'time']])
+            data[i] = concatenated_row
+        return data
+
+
+    def adjust_and_slice_by_lag(self, lag, target_length):
+        """
+        Adjust and slice TRC data based on a given lag to match a target length.
+
+        Parameters:
+            lag : int
+                The lag in frames. Positive values indicate a forward shift,
+                and negative values indicate a backward shift.
+            target_length : int
+                The length of the resulting data after the adjustment.
+
+        Returns:
+            None
+        """
+        num_frames = self.num_frames  # Total number of frames in the current TRC data
+
+        if lag > 0:
+            # Adjust start and end indices
+            start_idx = lag
+            end_idx = min(num_frames + lag, target_length)
+            # Slice the data and reset
+            self.data = self.data[start_idx:end_idx]
+            self.time = self.time[start_idx:end_idx]
+        elif lag < 0:
+            # Adjust start and end indices
+            start_idx = 0
+            end_idx = min(num_frames, target_length + lag)
+            # Slice the data and reset
+            self.data = self.data[-lag:end_idx - lag]
+            self.time = self.time[-lag:end_idx - lag]
+        else:
+            # No lag; simply trim to the target length
+            start_idx = 0
+            end_idx = min(num_frames, target_length)
+            self.data = self.data[start_idx:end_idx]
+            self.time = self.time[start_idx:end_idx]
+
+        # Update the frame count to reflect the new length
+        self.num_frames = len(self.data)
+
 
 # Standalone Functions
 def numpy2TRC(f, data, headers, fc=50.0, t_start=0.0, units="m"):
@@ -331,7 +604,7 @@ def numpy2TRC(f, data, headers, fc=50.0, t_start=0.0, units="m"):
 
 
 def write_trc(keypoints3D, pathOutputFile, keypointNames,
-              frameRate=60, rotationAngles={}):
+              frameRate=60, rotationAngles={}, unit="m", t_start=0.0):
     """
     Write 3D keypoints data to a TRC file.
 
@@ -354,7 +627,7 @@ def write_trc(keypoints3D, pathOutputFile, keypointNames,
     """
     with open(pathOutputFile, "w") as f:
         numpy2TRC(f, keypoints3D, keypointNames, fc=frameRate,
-                  units="m")
+                  units=unit, t_start=t_start)
 
     # Rotate data to match OpenSim conventions; this assumes the chessboard
     # is behind the subject and the chessboard axes are parallel to those of
@@ -366,3 +639,60 @@ def write_trc(keypoints3D, pathOutputFile, keypointNames,
     trc_file.write(pathOutputFile)
 
     return None
+
+
+def transform_to_tuple_array(interpolated_data, frame_numbers, time):
+    """
+    Transform interpolated data into an ndarray where each element is a tuple.
+
+    Parameters:
+        interpolated_data: ndarray
+            A 2D NumPy array of shape (num_frames, num_columns).
+        frame_numbers: ndarray
+            A 1D NumPy array of frame numbers.
+        time: ndarray
+            A 1D NumPy array of time values corresponding to each frame.
+
+    Returns:
+        ndarray
+            A 1D NumPy array where each element is a tuple (frame#, time, data...).
+    """
+    # Combine frame numbers, time, and interpolated data into a single array
+    combined_data = np.hstack((
+        frame_numbers[:, None],  # Frame numbers as a column
+        time[:, None],  # Time as a column
+        interpolated_data  # Marker data
+    ))
+
+    # Convert each row into a tuple
+    tuple_array = np.array([tuple(row) for row in combined_data])
+
+    return tuple_array
+
+
+def transform_from_tuple_array(void_array):
+    """
+    Transform a tuple array into separate NumPy arrays for frame numbers, time, and data.
+
+    Parameters:
+        tuple_array: ndarray
+            A 1D NumPy array where each element is a tuple (frame#, time, data...).
+
+    Returns:
+        frame_numbers: ndarray
+            A 1D NumPy array of frame numbers.
+        time: ndarray
+            A 1D NumPy array of time values corresponding to each frame.
+        interpolated_data: ndarray
+            A 2D NumPy array of shape (num_frames, num_columns).
+    """
+    # Extract frame numbers and time directly
+    frame_numbers = np.array([row[0] for row in void_array])
+    time = np.array([row[1] for row in void_array])
+
+    # Extract marker data by iterating over the fields beyond index 1
+    data = np.array([
+        tuple(row[i] for i in range(2, len(row)))
+        for row in void_array
+    ])
+    return data
