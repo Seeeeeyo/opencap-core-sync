@@ -89,7 +89,7 @@ def clean_column_names(df):
     return df
 
 
-def extract_marker_names(df):
+def extract_marker_names(df, remove_suffix=False, numbers=False):
     """
     Extract the marker names from the column names of a DataFrame.
 
@@ -101,8 +101,15 @@ def extract_marker_names(df):
         list
             List of unique marker names.
     """
-    marker_columns = [col for col in df.columns if re.search(r"-[XYZ]$", col)]
-    marker_names = list(set(re.sub(r"-[XYZ]$", "", col) for col in marker_columns))
+    if not numbers:
+        marker_columns = [col for col in df.columns if re.search(r"-[XYZ]$", col)]
+        marker_names = list(set(re.sub(r"-[XYZ]$", "", col) for col in marker_columns))
+    else:
+        marker_columns = [col for col in df.columns if re.search(r"-[XYZ]\d*$", col)]
+        marker_names = list(set(re.sub(r"-[XYZ]\d*$", "", col) for col in marker_columns))
+    if remove_suffix:
+        marker_names = list(set(re.sub(r"-\w$", "", col) for col in marker_names))
+
     return marker_names
 
 
@@ -225,8 +232,7 @@ def rotate_dataframe(df, axis, value):
         pd.DataFrame
             DataFrame with rotated marker data.
     """
-    marker_columns = [col for col in df.columns if re.search(r"-[XYZ]$", col)]
-    marker_names = list(set(re.sub(r"-[XYZ]$", "", col) for col in marker_columns))
+    marker_names = extract_marker_names(df)
 
     for marker in marker_names:
         temp = np.zeros((len(df), 3))
@@ -270,12 +276,18 @@ def read_trc_file(file_path):
     # Drop the first row
     data = data.drop(0)
 
-    # marker_names = extract_marker_names(data)
+    # Drop any NaN columns
+    data = data.dropna(axis=1, how='all')
 
-    # clean the column names
+    # Store the original column names
+    # original_column_names = data.columns.tolist()
+    original_column_names = extract_marker_names(data, remove_suffix=True, numbers=True)
+
+    # Clean the column names
     cleaned_data = clean_column_names(data)
 
-    return cleaned_data
+
+    return cleaned_data, original_column_names
 
 
 def main():
@@ -308,18 +320,27 @@ def main():
                         continue
 
                     marker_video_subdirs = [
-                        d for d in os.listdir(marker_video_path) if d != 'errors'
+                        d for d in os.listdir(marker_video_path) if d != 'errors' and d != 'shiftedIK'
                     ]
                     if not marker_video_subdirs:
                         continue
 
                     print(f"Filepath: {marker_video_path}")
 
-                    marker_video_path = os.path.join(marker_video_path, marker_video_subdirs[0])
+                    # get the folder in marker_video_subdirs list, it doesnt have any extension
+                    folder = next((d for d in marker_video_subdirs if '.' not in d), None)
+
+                    if folder is None:
+                        continue
+
+                    marker_video_path = os.path.join(marker_video_path, folder)
                     marker_video_files = [
                         f for f in os.listdir(marker_video_path) if f.endswith(".trc")
                     ]
                     if not marker_video_files:
+                        continue
+                    # if 'sync' is in one of the files, then continue
+                    if any("_sync.trc" in file for file in marker_video_files):
                         continue
 
                     marker_video_path = os.path.join(marker_video_path, marker_video_files[0])
@@ -331,14 +352,12 @@ def main():
                         MarkerDataDir, movement_file_name_trc
                     )
 
-                    try:
-                        marker_video_data = read_trc_file(marker_video_path)
-                        marker_mocap_data = read_trc_file(marker_mocap_path)
-                        marker_video_data = marker_video_data.astype(float)
-                        marker_mocap_data = marker_mocap_data.astype(float)
-                    except Exception as e:
-                        print(f"Error: {e}")
-                        continue
+
+                    marker_video_data, original_column_names = read_trc_file(marker_video_path)
+                    marker_mocap_data, _ = read_trc_file(marker_mocap_path)
+                    marker_video_data = marker_video_data.astype(float)
+                    marker_mocap_data = marker_mocap_data.astype(float)
+
 
                     mono_marker_names = extract_marker_names(marker_video_data)
                     mocap_marker_names = extract_marker_names(marker_mocap_data)
@@ -840,7 +859,7 @@ def main():
                         go.Bar(
                             x=list(marker_errors.keys()),
                             y=list(marker_errors.values()),
-                            name="Marker Errors",
+                            name="Marker Errors (mm)",
                         )
                     )
                     fig.add_trace(
@@ -848,13 +867,13 @@ def main():
                             x=list(marker_errors.keys()),
                             y=[average_error] * len(marker_errors),
                             mode="lines",
-                            name="Average Error",
+                            name="Average Error (mm)",
                         )
                     )
                     fig.update_layout(
-                        title=f"Marker Errors for {movement}",
+                        title=f"Marker Errors for {movement} (mm)",
                         xaxis_title="Marker",
-                        yaxis_title="Error",
+                        yaxis_title="Error (mm)",
                     )
 
                     # save the plot to a file
@@ -868,17 +887,45 @@ def main():
                     fig.write_html(error_plot_file_path)
 
 
+
+                    # rotated_marker_video_data = rotated_marker_video_data.drop(columns=["Time"])
+                    # get the sets of markers without the suffixes -X, -Y, -Z
+                    base_markers = set()
+                    for col in rotated_marker_video_data.columns:
+                        if col in ["Time", "Frame#"]:
+                            continue
+                        col_base = col[:-2]
+                        if len(col_base) > 1:
+                            base_markers.add(col_base)
+
+                    # reshape the video marker data to (num_frames, num_markers * 3)
+                    # markers to write is a np array of shape (num_frames, num_markers * 3)
+                    num_frames = rotated_marker_video_data.shape[0]
+                    num_markers = len(base_markers)
+                    markers_to_write = np.zeros((num_frames, num_markers * 3))
+                    marker_names_to_write = []
+
+                    for i, marker in enumerate(base_markers):
+                        x = rotated_marker_video_data[f"{marker}-X"].values
+                        y = rotated_marker_video_data[f"{marker}-Y"].values
+                        z = rotated_marker_video_data[f"{marker}-Z"].values
+                        markers_to_write[:, i * 3] = x
+                        markers_to_write[:, i * 3 + 1] = y
+                        markers_to_write[:, i * 3 + 2] = z
+                        marker_names_to_write.append(marker)
+
                     # TODO write the aligned mono data to file _sync.trc
                     synced_path = marker_video_path.replace(".trc", "_sync.trc")
 
                     write_trc(
-                        keypoints3D=rotated_marker_video_data,
+                        keypoints3D=markers_to_write,
                         pathOutputFile=synced_path,
-                        keypointNames=rotated_marker_video_data.columns[1:],
+                        keypointNames=original_column_names[2:],
                         frameRate=100,
                     )
 
-                    print("Wrote aligned mono data to file")
+                    print(f"Wrote synced marker data to: {synced_path}")
+                    print("-" * 50)
 
 
 if __name__ == "__main__":
