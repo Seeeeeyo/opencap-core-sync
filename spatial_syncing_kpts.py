@@ -9,285 +9,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from scipy.spatial.transform import Rotation as R
 import re
-from utils_trc import write_trc, TRCFile, transform_from_tuple_array
+from utils_trc import write_trc, TRCFile, transform_from_tuple_array, align_trc_files
 
-
-# def get_metric(marker_data):
-#     if marker_data > 100:
-#         metric_mocap = 'mm'
-#     elif marker_data > 1:
-#         metric_mocap = 'cm'
-#     else:
-#         metric_mocap = 'm'
-#
-#     return metric_mocap
-
-
-# def convert_to_metric(df, current_metric, target_metric):
-#     """
-#     Convert all columns besides 'Time' and 'Frame#' from the original metric to the target metric.
-#
-#     Parameters:
-#         df : pd.DataFrame
-#             DataFrame containing marker position data.
-#         current_metric : str
-#             The current metric of the data ('mm', 'cm', 'm').
-#         target_metric : str
-#             The target metric to convert the data to ('mm', 'cm', 'm').
-#
-#     Returns:
-#         pd.DataFrame
-#             DataFrame with converted marker position data.
-#     """
-#     conversion_factors = {
-#         ('mm', 'cm'): 0.1,
-#         ('mm', 'm'): 0.001,
-#         ('cm', 'mm'): 10,
-#         ('cm', 'm'): 0.01,
-#         ('m', 'mm'): 1000,
-#         ('m', 'cm'): 100,
-#     }
-#
-#     if current_metric == target_metric:
-#         return df
-#
-#     factor = conversion_factors.get((current_metric, target_metric))
-#     if factor is None:
-#         raise ValueError(f"Unsupported conversion from {current_metric} to {target_metric}")
-#
-#     columns_to_convert = [col for col in df.columns if col not in ['Time', 'Frame#']]
-#     df[columns_to_convert] = df[columns_to_convert] * factor
-#     print(f"Converted {current_metric} to {target_metric}")
-#     return df
-#
-# def clean_column_names(df):
-#     """
-#     Clean the column names of a DataFrame by removing trailing numbers from marker suffixes,
-#     converting all column names to lowercase except for the '-X', '-Y', and '-Z' suffixes,
-#     and keeping 'Time' and 'Frame' column names uppercase.
-#
-#     Parameters:
-#         df : pd.DataFrame
-#             DataFrame containing marker position data with `X`, `Y`, and `Z` columns.
-#
-#     Returns:
-#         pd.DataFrame
-#             DataFrame with cleaned column names.
-#     """
-#     df.columns = df.columns.astype(str)
-#     new_column_names = {}
-#     for col in df.columns:
-#         if col in ["Time", "Frame#"]:
-#             new_column_names[col] = col
-#         elif re.search(r"-[XYZ]\d+$", col):
-#             new_name = re.sub(r"(\-[XYZ])\d+$", r"\1", col)
-#             new_name = new_name.lower()[:-2] + new_name[-2:].upper()
-#             new_column_names[col] = new_name
-#         else:
-#             new_column_names[col] = col.lower()
-#     df = df.rename(columns=new_column_names)
-#     return df
-#
-#
-# def extract_marker_names(df, remove_suffix=False, numbers=False):
-#     """
-#     Extract the marker names from the column names of a DataFrame.
-#
-#     Parameters:
-#         df : pd.DataFrame
-#             DataFrame containing marker position data with `X`, `Y`, and `Z` columns.
-#
-#     Returns:
-#         list
-#             List of unique marker names.
-#     """
-#     if not numbers:
-#         marker_columns = [col for col in df.columns if re.search(r"-[XYZ]$", col)]
-#         marker_names = list(set(re.sub(r"-[XYZ]$", "", col) for col in marker_columns))
-#     else:
-#         marker_columns = [col for col in df.columns if re.search(r"-[XYZ]\d*$", col)]
-#         marker_names = list(set(re.sub(r"-[XYZ]\d*$", "", col) for col in marker_columns))
-#     if remove_suffix:
-#         marker_names = list(set(re.sub(r"-\w$", "", col) for col in marker_names))
-#
-#     return marker_names
-#
-#
-# def extract_alpha_chars(s):
-#     return "".join(sorted(re.findall(r"[a-zA-Z]", s)))
-
-#
-# def compute_marker_errors(rotated_marker_video_data, marker_mocap_data_trimmed):
-#     """
-#     Compute the mean per marker error for each marker and the average error over all markers.
-#
-#     Parameters:
-#         rotated_marker_video_data : pd.DataFrame
-#             DataFrame containing the rotated marker video data.
-#         marker_mocap_data_trimmed : pd.DataFrame
-#             DataFrame containing the trimmed marker mocap data.
-#
-#     Returns:
-#         dict
-#             Dictionary containing the mean error for each marker.
-#         float
-#             Average error over all markers.
-#     """
-#     marker_errors = {}
-#     total_error = 0
-#     marker_count = 0
-#
-#     # Extract marker names and their alphabetic characters
-#     video_markers = {
-#         col: extract_alpha_chars(col)
-#         for col in rotated_marker_video_data.columns
-#         if col not in ["Time", "Frame#"]
-#     }
-#     mocap_markers = {
-#         col: extract_alpha_chars(col) for col in marker_mocap_data_trimmed.columns
-#     }
-#
-#     # Find common markers based on the sorted alphabetic characters
-#     common_markers = set()
-#     for video_marker, video_alpha in video_markers.items():
-#         for mocap_marker, mocap_alpha in mocap_markers.items():
-#             if video_alpha == mocap_alpha:
-#                 common_markers.add((video_marker, mocap_marker))
-#                 break
-#     # print(f"Common Markers: {common_markers}")
-#
-#     # Find unmatched markers
-#     matched_video_markers = {pair[0] for pair in common_markers}
-#     matched_mocap_markers = {pair[1] for pair in common_markers}
-#
-#     unmatched_video_markers = set(video_markers.keys()) - matched_video_markers
-#     unmatched_mocap_markers = set(mocap_markers.keys()) - matched_mocap_markers
-#
-#     # Remove 'Time' and 'Frame#' from unmatched markers
-#     unmatched_video_markers.discard("Time")
-#     unmatched_video_markers.discard("Frame#")
-#     unmatched_mocap_markers.discard("Time")
-#     unmatched_mocap_markers.discard("Frame#")
-#
-#     # print(f"Unmatched Video Markers: {unmatched_video_markers}")
-#     # print(f"Unmatched Mocap Markers: {unmatched_mocap_markers}")
-#
-#     # base_common_pairs is a set of common markers from common_markers but without the suffixes -X, -Y, -Z
-#     base_common_pairs = set()
-#     for pair in common_markers:
-#         pair_0 = pair[0][:-2]
-#         pair_1 = pair[1][:-2]
-#         if len(pair_0) > 1:
-#             base_common_pairs.add((pair_0, pair_1))
-#
-#     # print(f"Base Common Pairs: {base_common_pairs}")
-#
-#     for marker in base_common_pairs:
-#         video_marker_base = marker[0]
-#         mocap_marker_base = marker[1]
-#
-#         # Compute the Euclidean distance for each marker
-#         error = np.sqrt(
-#             (
-#                 rotated_marker_video_data[f"{video_marker_base}-X"]
-#                 - marker_mocap_data_trimmed[f"{mocap_marker_base}-X"]
-#             )
-#             ** 2
-#             + (
-#                 rotated_marker_video_data[f"{video_marker_base}-Y"]
-#                 - marker_mocap_data_trimmed[f"{mocap_marker_base}-Y"]
-#             )
-#             ** 2
-#             + (
-#                 rotated_marker_video_data[f"{video_marker_base}-Z"]
-#                 - marker_mocap_data_trimmed[f"{mocap_marker_base}-Z"]
-#             )
-#             ** 2
-#         )
-#
-#         mean_error = np.mean(error)
-#         marker_errors[video_marker_base] = round(mean_error, 3)
-#         total_error += mean_error
-#         marker_count += 1
-#
-#     # Compute the average error over all markers
-#     average_error = total_error / marker_count if marker_count > 0 else 0
-#
-#     return marker_errors, round(average_error, 3)
-
-
-# def rotate_dataframe(df, axis, value):
-#     """
-#     Rotate the marker data in a DataFrame.
-#
-#     Parameters:
-#         df : pd.DataFrame
-#             DataFrame containing marker position data with `X`, `Y`, and `Z` columns.
-#         axis : str
-#             Rotation axis ('x', 'y', 'z').
-#         value : float
-#             Angle in degrees.
-#
-#     Returns:
-#         pd.DataFrame
-#             DataFrame with rotated marker data.
-#     """
-#     marker_names = extract_marker_names(df)
-#
-#     for marker in marker_names:
-#         temp = np.zeros((len(df), 3))
-#         temp[:, 0] = df[f"{marker}-X"]
-#         temp[:, 1] = df[f"{marker}-Y"]
-#         temp[:, 2] = df[f"{marker}-Z"]
-#
-#         r = R.from_euler(axis, value, degrees=True)
-#         temp_rot = r.apply(temp)
-#
-#         df[f"{marker}-X"] = temp_rot[:, 0]
-#         df[f"{marker}-Y"] = temp_rot[:, 1]
-#         df[f"{marker}-Z"] = temp_rot[:, 2]
-#
-#     return df
-
-#
-# def read_trc_file(file_path):
-#     with open(file_path, "r") as file:
-#         lines = file.readlines()
-#
-#     # Find the line where the data header starts
-#     start_line = 0
-#     for i, line in enumerate(lines):
-#         if line.startswith("Frame#"):
-#             start_line = i
-#             break
-#
-#     # Read the data from the identified starting line
-#     data = pd.read_csv(file_path, delimiter="\t", skiprows=start_line, engine="python")
-#
-#     # Replace the column names containing "Unnamed : number" with the previous column name
-#     for i, col in enumerate(data.columns):
-#         if "Unnamed" in col:
-#             data.columns.values[i] = data.columns.values[i - 1]
-#
-#     data.columns = data.columns + "-" + data.iloc[0]
-#     data.columns.values[0] = "Frame#"
-#     data.columns.values[1] = "Time"
-#
-#     # Drop the first row
-#     data = data.drop(0)
-#
-#     # Drop any NaN columns
-#     data = data.dropna(axis=1, how='all')
-#
-#     # Store the original column names
-#     # original_column_names = data.columns.tolist()
-#     original_column_names = extract_marker_names(data, remove_suffix=True, numbers=True)
-#
-#     # Clean the column names
-#     cleaned_data = clean_column_names(data)
-#
-#
-#     return cleaned_data, original_column_names
 
 def calculate_midpoint(trc_file, right_marker, left_marker):
     assert trc_file.marker_exists(right_marker), f"Marker {right_marker} does not exist in the TRC file."
@@ -312,7 +35,11 @@ def main():
     output_path = os.path.join(repo_path, "output")
     frame_rate = 100
 
-    subjects_dirs = os.listdir(output_path)
+    # subjects_dirs = os.listdir(output_path)
+
+
+    # HARDCODED SUBJECTS
+    subjects_dirs = ['subject2']
 
     for subject in subjects_dirs:
         MarkerDataDir = os.path.join(
@@ -356,9 +83,17 @@ def main():
                     ]
                     if not marker_video_files:
                         continue
+
                     # if 'sync' is in one of the files, then continue
-                    if any("_sync.trc" in file for file in marker_video_files):
-                        continue
+                    # if any("_sync.trc" in file for file in marker_video_files):
+                    # continue
+                        # delete the file
+
+                    # if 'sync' is in one of the files, then delete it
+                    for file in marker_video_files:
+                        if "_sync.trc" in file:
+                            os.remove(os.path.join(marker_video_path, file))
+
 
                     marker_video_path = os.path.join(marker_video_path, marker_video_files[0])
                     if not os.path.exists(marker_video_path):
@@ -369,11 +104,6 @@ def main():
                         MarkerDataDir, movement_file_name_trc
                     )
 
-
-                    # marker_video_data, original_column_names = read_trc_file(marker_video_path)
-                    # marker_mocap_data, _ = read_trc_file(marker_mocap_path)
-                    # marker_video_data = marker_video_data.astype(float)
-                    # marker_mocap_data = marker_mocap_data.astype(float)
                     trc_mono = TRCFile(marker_video_path)
                     trc_mocap = TRCFile(marker_mocap_path)
 
@@ -410,7 +140,9 @@ def main():
 
 
                     # Shift
-                    trc_mono.adjust_and_slice_by_lag(lag=lag, target_length=trc_mocap.data.shape[0])
+                    align_trc_files(trc_mono, trc_mocap, lag)
+                    # trc_mono.adjust_and_slice_by_lag(lag=lag,trc_mocap=trc_mocap)
+                    # trc_mono.adjust_and_slice_by_lag(lag=lag, target_length=trc_mocap.data.shape[0])
                     print(f"Shifted mono TRC by {lag} frames.")
 
                     mocap_start, mocap_end = trc_mocap.get_start_end_times()
@@ -420,14 +152,15 @@ def main():
                     print(f"Mono Start: {mono_start}, Mono End: {mono_end}")
 
 
-                    time_offset = mocap_start - mono_start
-                    print(f"Time Offset: {time_offset}")
-
-                    # add the time offset to the time video
-                    trc_mono.add_time_offset(time_offset)
-
-                    # trim the video data to match the length of the mocap data
-                    trc_mono.trim_to_match(mocap_start, mocap_end)
+                    # # TODO verify if the time offset is correct and if this is needed for trc
+                    # time_offset = mocap_start - mono_start
+                    # print(f"Time Offset: {time_offset}")
+                    #
+                    # # add the time offset to the time video
+                    # trc_mono.add_time_offset(time_offset)
+                    #
+                    # # trim the video data to match the length of the mocap data
+                    # trc_mono.trim_to_match(mocap_start, mocap_end)
 
 
                     trc_mono_marker_names = trc_mono.get_marker_names()
@@ -659,6 +392,10 @@ def main():
                         frameRate=frame_rate,
                         t_start=start_time,
                     )
+
+                    # load the new trc file to ensure the data was written correctly
+                    trc_synced = TRCFile(synced_path)
+                    trc_synced_marker_names = trc_synced.get_marker_names()
 
                     print(f"Wrote synced marker data to: {synced_path}")
                     print("-" * 50)

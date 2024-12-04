@@ -515,45 +515,105 @@ class TRCFile(object):
         return data
 
 
-    def adjust_and_slice_by_lag(self, lag, target_length):
-        """
-        Adjust and slice TRC data based on a given lag to match a target length.
+    # def adjust_and_slice_by_lag(self, lag, target_length):
+    #     """
+    #     Adjust and slice TRC data based on a given lag to match a target length.
+    #
+    #     Parameters:
+    #         lag : int
+    #             The lag in frames. Positive values indicate a forward shift,
+    #             and negative values indicate a backward shift.
+    #         target_length : int
+    #             The length of the resulting data after the adjustment.
+    #
+    #     Returns:
+    #         None
+    #     """
+    #     num_frames = self.num_frames  # Total number of frames in the current TRC data
+    #
+    #     if lag > 0:
+    #         # Adjust start and end indices
+    #         start_idx = lag
+    #         end_idx = min(num_frames + lag, target_length)
+    #         # Slice the data and reset
+    #         self.data = self.data[start_idx:end_idx]
+    #         self.time = self.time[start_idx:end_idx]
+    #     elif lag < 0:
+    #         # Adjust start and end indices
+    #         start_idx = 0
+    #         end_idx = min(num_frames, target_length + lag)
+    #         # Slice the data and reset
+    #         self.data = self.data[-lag:end_idx - lag]
+    #         self.time = self.time[-lag:end_idx - lag]
+    #     else:
+    #         # No lag; simply trim to the target length
+    #         start_idx = 0
+    #         end_idx = min(num_frames, target_length)
+    #         self.data = self.data[start_idx:end_idx]
+    #         self.time = self.time[start_idx:end_idx]
+    #
+    #     # Update the frame count to reflect the new length
+    #     self.num_frames = len(self.data)
 
-        Parameters:
-            lag : int
-                The lag in frames. Positive values indicate a forward shift,
-                and negative values indicate a backward shift.
-            target_length : int
-                The length of the resulting data after the adjustment.
+    # def adjust_and_slice_by_lag(self, lag, trc_mocap):
+    #     """
+    #     Adjust TRC data by finding the time of trc_mocap at the lag value and adding this time offset to all time values of trc_mono.
+    #
+    #     Parameters:
+    #         lag : int
+    #             The lag in frames. Positive values indicate a forward shift,
+    #             and negative values indicate a backward shift.
+    #         trc_mocap : TRCFile
+    #             The TRCFile object containing the mocap data.
+    #
+    #     Returns:
+    #         None
+    #     """
+    #     # Find the time offset from trc_mocap at the lag value
+    #     if lag > 0:
+    #         time_offset = trc_mocap.time[lag]
+    #     elif lag < 0:
+    #         time_offset = trc_mocap.time[lag]
+    #     else:
+    #         time_offset = 0
+    #
+    #     # Add the time offset to all time values of trc_mono
+    #     self.time += time_offset
+    #     self.data['time'] += time_offset
+    #
+    #     # Update the frame count to reflect the new length
+    #     self.num_frames = len(self.data)
 
-        Returns:
-            None
-        """
-        num_frames = self.num_frames  # Total number of frames in the current TRC data
+def align_trc_files(trc_mono, trc_mocap, lag):
+    """
+    Aligns trc_mono to trc_mocap by adjusting the time vector based on lag.
 
-        if lag > 0:
-            # Adjust start and end indices
-            start_idx = lag
-            end_idx = min(num_frames + lag, target_length)
-            # Slice the data and reset
-            self.data = self.data[start_idx:end_idx]
-            self.time = self.time[start_idx:end_idx]
-        elif lag < 0:
-            # Adjust start and end indices
-            start_idx = 0
-            end_idx = min(num_frames, target_length + lag)
-            # Slice the data and reset
-            self.data = self.data[-lag:end_idx - lag]
-            self.time = self.time[-lag:end_idx - lag]
-        else:
-            # No lag; simply trim to the target length
-            start_idx = 0
-            end_idx = min(num_frames, target_length)
-            self.data = self.data[start_idx:end_idx]
-            self.time = self.time[start_idx:end_idx]
+    Parameters:
+        trc_mono : TRCFile
+            The TRC object for mono data.
+        trc_mocap : TRCFile
+            The TRC object for mocap data.
+        lag : int
+            The lag value (in frames) between trc_mono and trc_mocap.
 
-        # Update the frame count to reflect the new length
-        self.num_frames = len(self.data)
+    Returns:
+        TRCFile
+            A new TRCFile object for the aligned trc_mono.
+    """
+    # Get the time offset from mocap time at trc_mono time 0 adjusted by lag
+    mocap_start_time = trc_mocap.time[0]
+    mono_start_time_adjusted = trc_mono.time[0] + lag / trc_mono.data_rate
+    time_offset = mocap_start_time - mono_start_time_adjusted
+
+    # Shift the time vector of trc_mono
+    trc_mono.add_time_offset(time_offset)
+
+    # Trim trc_mono to match the time range of trc_mocap
+    mocap_start, mocap_end = trc_mocap.get_start_end_times()
+    trc_mono.trim_to_match(mocap_start, mocap_end)
+
+    # Return the adjusted trc_mono
+    return trc_mono
 
 
 # Standalone Functions
