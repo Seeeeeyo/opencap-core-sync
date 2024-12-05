@@ -6,6 +6,8 @@ from scipy.spatial.transform import Rotation as R
 
 import numpy as np
 from numpy.lib.recfunctions import append_fields
+from loguru import logger
+
 
 
 class TRCFile(object):
@@ -377,7 +379,7 @@ class TRCFile(object):
         }
 
         if current_metric == target_metric:
-            print("Current metric is already the target metric. No conversion performed.")
+            logger.info("Current metric is already the target metric. No conversion performed.")
             return
 
         factor = conversion_factors.get((current_metric, target_metric))
@@ -391,7 +393,7 @@ class TRCFile(object):
         for col in marker_columns:
             data[col] *= factor
 
-        print(f"Converted {current_metric} to {target_metric}.")
+        logger.info(f"Converted {current_metric} to {target_metric}.")
         self.units = target_metric
 
     def get_frequency(self):
@@ -412,54 +414,49 @@ class TRCFile(object):
             str
                 The detected metric of the data ('mm', 'cm', 'm').
         """
-        # Extract marker columns (exclude 'frame_num' and 'time')
-        marker_columns = [col for col in self.data.dtype.names if col not in ['frame_num', 'time']]
-
-        # Flatten all marker data into one array to assess its range
-        marker_data = np.concatenate([self.data[col] for col in marker_columns])
-
-        # Determine the metric based on the maximum value
-        max_marker_value = np.max(np.abs(marker_data))  # Use absolute values for robustness
-        if max_marker_value > 100:
+        # get the right knee position at frame 0
+        right_knee = self.marker('r_knee')
+        right_knee = np.max(right_knee[0])
+        if right_knee > 100:
             metric = 'mm'
-        elif max_marker_value > 1:
+        elif right_knee > 1:
             metric = 'cm'
         else:
             metric = 'm'
 
         return metric
 
-    def shift_data_by_lag(self, lag, target_length):
-        """
-        Shift the TRC data based on a given lag and update self.data.
-
-        Parameters:
-            lag : int
-                The lag in frames. Positive values indicate a forward shift,
-                and negative values indicate a backward shift.
-            target_length : int
-                The length of the resulting data after the shift (e.g., mocap data length).
-
-        Returns:
-            None
-        """
-        num_frames = self.data.shape[0]  # Total number of frames in the current data
-
-        if lag > 0:
-            # start_idx = lag
-            end_idx = min(num_frames + lag, target_length)
-            self.data = self.data[:end_idx - lag]
-        elif lag < 0:
-            # start_idx = 0
-            end_idx = min(num_frames, target_length + lag)
-            self.data = self.data[-lag:end_idx - lag]
-        else:
-            # start_idx = 0
-            end_idx = min(num_frames, target_length)
-            self.data = self.data[:end_idx]
-
-        # Ensure self.data retains the same dtype
-        self.data = np.array(self.data, dtype=self.data.dtype)
+    # def shift_data_by_lag(self, lag, target_length):
+    #     """
+    #     Shift the TRC data based on a given lag and update self.data.
+    #
+    #     Parameters:
+    #         lag : int
+    #             The lag in frames. Positive values indicate a forward shift,
+    #             and negative values indicate a backward shift.
+    #         target_length : int
+    #             The length of the resulting data after the shift (e.g., mocap data length).
+    #
+    #     Returns:
+    #         None
+    #     """
+    #     num_frames = self.data.shape[0]  # Total number of frames in the current data
+    #
+    #     if lag > 0:
+    #         # start_idx = lag
+    #         end_idx = min(num_frames + lag, target_length)
+    #         self.data = self.data[:end_idx - lag]
+    #     elif lag < 0:
+    #         # start_idx = 0
+    #         end_idx = min(num_frames, target_length + lag)
+    #         self.data = self.data[-lag:end_idx - lag]
+    #     else:
+    #         # start_idx = 0
+    #         end_idx = min(num_frames, target_length)
+    #         self.data = self.data[:end_idx]
+    #
+    #     # Ensure self.data retains the same dtype
+    #     self.data = np.array(self.data, dtype=self.data.dtype)
 
     def get_start_end_times(self):
         start = self.time[0]
@@ -603,7 +600,7 @@ def align_trc_files(trc_mono, trc_mocap, lag):
     # Get the time offset from mocap time at trc_mono time 0 adjusted by lag
     mocap_start_time = trc_mocap.time[0]
     mono_start_time_adjusted = trc_mono.time[0] + lag / trc_mono.data_rate
-    time_offset = mocap_start_time - mono_start_time_adjusted
+    time_offset = mono_start_time_adjusted - mocap_start_time
 
     # Shift the time vector of trc_mono
     trc_mono.add_time_offset(time_offset)
