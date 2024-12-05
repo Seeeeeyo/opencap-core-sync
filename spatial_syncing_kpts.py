@@ -1,6 +1,5 @@
 from matplotlib import pyplot as plt
 from utilsChecker import cross_corr_multiple_timeseries
-import os
 import pandas as pd
 import numpy as np
 from scipy.interpolate import interp1d
@@ -8,9 +7,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from scipy.spatial.transform import Rotation as R
-import re
 from utils_trc import write_trc, TRCFile, transform_from_tuple_array, align_trc_files
-
+import os
+from loguru import logger
 
 def calculate_midpoint(trc_file, right_marker, left_marker):
     assert trc_file.marker_exists(right_marker), f"Marker {right_marker} does not exist in the TRC file."
@@ -35,24 +34,43 @@ def main():
     output_path = os.path.join(repo_path, "output")
     frame_rate = 100
 
-    # subjects_dirs = os.listdir(output_path)
+    subjects_dirs = os.listdir(output_path)
 
-
+    single_run = True
     # HARDCODED SUBJECTS
-    subjects_dirs = ['subject2']
+    if single_run:
+        hd_subjects_dirs = ['subject2']
+        hd_sessions_dirs = ['Session0']
+        hd_cameras = ['Cam2']
+        hd_movements = ['STSweakLegs1']
+        logger.info("Running on a single subject.")
+
+    if single_run:
+        subjects_dirs = hd_subjects_dirs
 
     for subject in subjects_dirs:
+
         MarkerDataDir = os.path.join(
             validation_videos_path, subject, "MarkerData", "Mocap"
         )
         subject_path = os.path.join(output_path, subject)
-        sessions = os.listdir(subject_path)
+
+        if single_run:
+            sessions = hd_sessions_dirs
+        else:
+            sessions = os.listdir(subject_path)
 
         for session in sessions:
-            cameras = os.listdir(os.path.join(subject_path, session))
+            if single_run:
+                cameras = hd_cameras
+            else:
+                cameras = os.listdir(os.path.join(subject_path, session))
 
             for camera in cameras:
-                movements = os.listdir(os.path.join(subject_path, session, camera))
+                if single_run:
+                    movements = hd_movements
+                else:
+                    movements = os.listdir(os.path.join(subject_path, session, camera))
 
                 for movement in movements:
                     movement_path = os.path.join(
@@ -69,7 +87,7 @@ def main():
                     if not marker_video_subdirs:
                         continue
 
-                    print(f"Filepath: {marker_video_path}")
+                    logger.info(f"Filepath: {marker_video_path}")
 
                     # get the folder in marker_video_subdirs list, it doesnt have any extension
                     folder = next((d for d in marker_video_subdirs if '.' not in d), None)
@@ -110,8 +128,8 @@ def main():
                     mocap_start, mocap_end = trc_mocap.get_start_end_times()
                     mono_start, mono_end = trc_mono.get_start_end_times()
 
-                    print(f"Mocap Start: {mocap_start}, Mocap End: {mocap_end}")
-                    print(f"Mono Start: {mono_start}, Mono End: {mono_end}")
+                    logger.info(f"Mocap Start: {mocap_start}, Mocap End: {mocap_end}")
+                    logger.info(f"Mono Start: {mono_start}, Mono End: {mono_end}")
 
 
                     # mono_marker_names = extract_marker_names(marker_video_data)
@@ -131,11 +149,11 @@ def main():
 
 
                     if trc_mono.get_frequency() != frame_rate:
-                        print(f"Resampling mono TRC to {frame_rate} Hz.")
+                        logger.info(f"Resampling mono TRC to {frame_rate} Hz.")
                         trc_mono.resample_trc(target_frequency=frame_rate)
 
                     if trc_mocap.get_frequency() != frame_rate:
-                        print(f"Resampling mocap TRC to {frame_rate} Hz.")
+                        logger.info(f"Resampling mocap TRC to {frame_rate} Hz.")
                         trc_mocap.resample_trc(target_frequency=frame_rate)
 
 
@@ -143,18 +161,18 @@ def main():
                     align_trc_files(trc_mono, trc_mocap, lag)
                     # trc_mono.adjust_and_slice_by_lag(lag=lag,trc_mocap=trc_mocap)
                     # trc_mono.adjust_and_slice_by_lag(lag=lag, target_length=trc_mocap.data.shape[0])
-                    print(f"Shifted mono TRC by {lag} frames.")
+                    logger.info(f"Shifted mono TRC by {lag} frames.")
 
                     mocap_start, mocap_end = trc_mocap.get_start_end_times()
                     mono_start, mono_end = trc_mono.get_start_end_times()
 
-                    print(f"Mocap Start: {mocap_start}, Mocap End: {mocap_end}")
-                    print(f"Mono Start: {mono_start}, Mono End: {mono_end}")
+                    logger.info(f"Mocap Start: {mocap_start}, Mocap End: {mocap_end}")
+                    logger.info(f"Mono Start: {mono_start}, Mono End: {mono_end}")
 
 
                     # # TODO verify if the time offset is correct and if this is needed for trc
                     # time_offset = mocap_start - mono_start
-                    # print(f"Time Offset: {time_offset}")
+                    # logger.info(f"Time Offset: {time_offset}")
                     #
                     # # add the time offset to the time video
                     # trc_mono.add_time_offset(time_offset)
@@ -166,8 +184,8 @@ def main():
                     trc_mono_marker_names = trc_mono.get_marker_names()
                     trc_mocap_marker_names = trc_mocap.get_marker_names()
 
-                    # print(f"Mono Marker Names: {trc_mono_marker_names}")
-                    # print(f"Mocap Marker Names: {trc_mocap_marker_names}")
+                    # logger.info(f"Mono Marker Names: {trc_mono_marker_names}")
+                    # logger.info(f"Mocap Marker Names: {trc_mocap_marker_names}")
 
 
                     # get the metric of the markers
@@ -177,8 +195,10 @@ def main():
                     # convert the markers to the same metric
                     if mono_metric != 'mm':
                         trc_mono.convert_to_metric_trc(current_metric=mono_metric, target_metric='mm')
+                        logger.info(f"Converted mono markers from {mono_metric} to mm.")
                     if mocap_metric != 'mm':
                         trc_mocap.convert_to_metric_trc(current_metric=mocap_metric, target_metric='mm')
+                        logger.info(f"Converted mocap markers from {mocap_metric} to mm.")
 
 
                     # Rotational alignment
@@ -227,7 +247,7 @@ def main():
                     # Calculate the average angular difference
                     average_difference = np.mean(angles_degrees)
 
-                    print(
+                    logger.info(
                         f"Average Angular Difference: {average_difference:.2f} degrees"
                     )
 
@@ -277,9 +297,9 @@ def main():
                     avg_z_offset = np.mean(offsets_z)
 
                     # Print results
-                    print(f"Average X Offset: {avg_x_offset:.2f} mm")
-                    print(f"Average Y Offset: {avg_y_offset:.2f} mm")
-                    print(f"Average Z Offset: {avg_z_offset:.2f} mm")
+                    logger.info(f"Average X Offset: {avg_x_offset:.2f} mm")
+                    logger.info(f"Average Y Offset: {avg_y_offset:.2f} mm")
+                    logger.info(f"Average Z Offset: {avg_z_offset:.2f} mm")
 
                     # Apply the offset to all rotated markers of the video data (all columns ending with '-X', '-Y', '-Z')
                     trc_mono.offset(axis='x', value=avg_x_offset)
@@ -290,98 +310,75 @@ def main():
                     # first find the common markers using regex. e.g r-knee-X is the same as r.knee-X or knee.r-X
                     # then compute the error for each marker
 
-                    # marker_errors, average_error = compute_marker_errors(
-                    #     rotated_marker_video_data, marker_mocap_data_trimmed
-                    # )
-                    # print(f"Marker Errors: {marker_errors}")
-                    # print(f"Average Error: {average_error:.2f}")
+                    # Compute the mean per marker error for each marker
+                    marker_errors = {}
+                    for mono_marker, mocap_marker in markers.items():
+                        assert trc_mono.marker_exists(
+                            mono_marker), f"Marker {mono_marker} does not exist in the mono TRC file."
+                        assert trc_mocap_trimmed.marker_exists(
+                            mocap_marker), f"Marker {mocap_marker} does not exist in the mocap TRC file."
 
-                    # export the marker errors to a csv
-                    # error_file_name = f"marker_errors_{movement}.csv"
+                        mono_data = trc_mono.marker(mono_marker)
+                        mocap_data = trc_mocap_trimmed.marker(mocap_marker)
 
-                    # error_markers_path_file = os.path.join(
-                    #     error_markers_path, 'errors', error_file_name
-                    # )
+                        # Compute the Euclidean distance (2-norm) for each frame
+                        errors = np.linalg.norm(mono_data - mocap_data, axis=1)
+                        marker_errors[mono_marker] = np.mean(errors)
 
-                    # if not os.path.exists(os.path.join(error_markers_path, 'errors')):
-                    #     os.makedirs(os.path.join(error_markers_path, 'errors'))
+                    # Compute the average error over all markers
+                    average_error = np.mean(list(marker_errors.values()))
 
+                    logger.info(f"Marker Errors: {marker_errors}")
+                    logger.info(f"Average Error: {average_error:.2f}")
 
-                    # with open(error_markers_path_file, "w") as file:
-                    #     file.write("Marker,Error\n")
-                    #     for marker, error in marker_errors.items():
-                    #         file.write(f"{marker},{error}\n")
-                    #     file.write(f"Average,{average_error}\n")
-                    #
-                    # # plot the marker errors
-                    # fig = go.Figure()
-                    # fig.add_trace(
-                    #     go.Bar(
-                    #         x=list(marker_errors.keys()),
-                    #         y=list(marker_errors.values()),
-                    #         name="Marker Errors (mm)",
-                    #     )
-                    # )
-                    # fig.add_trace(
-                    #     go.Scatter(
-                    #         x=list(marker_errors.keys()),
-                    #         y=[average_error] * len(marker_errors),
-                    #         mode="lines",
-                    #         name="Average Error (mm)",
-                    #     )
-                    # )
-                    # fig.update_layout(
-                    #     title=f"Marker Errors for {movement} (mm)",
-                    #     xaxis_title="Marker",
-                    #     yaxis_title="Error (mm)",
-                    # )
-                    #
-                    # # save the plot to a file
-                    # error_plot_file_name = f"marker_errors_plot_{movement}.html"
-                    #
-                    #
-                    # error_plot_file_path = os.path.join(
-                    #     error_markers_path, 'errors', error_plot_file_name
-                    # )
-                    #
-                    # fig.write_html(error_plot_file_path)
+                    # Export the marker errors to a CSV
+                    error_file_name = f"marker_errors_{movement}.csv"
+                    error_markers_path_file = os.path.join(error_markers_path, 'errors', error_file_name)
 
+                    if not os.path.exists(os.path.join(error_markers_path, 'errors')):
+                        os.makedirs(os.path.join(error_markers_path, 'errors'))
 
+                    with open(error_markers_path_file, "w") as file:
+                        file.write("Marker,Error\n")
+                        for marker, error in marker_errors.items():
+                            file.write(f"{marker},{error}\n")
+                        file.write(f"Average,{average_error}\n")
 
-                    # # rotated_marker_video_data = rotated_marker_video_data.drop(columns=["Time"])
-                    # # get the sets of markers without the suffixes -X, -Y, -Z
-                    # base_markers = set()
-                    # for col in rotated_marker_video_data.columns:
-                    #     if col in ["Time", "Frame#"]:
-                    #         continue
-                    #     col_base = col[:-2]
-                    #     if len(col_base) > 1:
-                    #         base_markers.add(col_base)
-                    #
-                    # # reshape the video marker data to (num_frames, num_markers * 3)
-                    # # markers to write is a np array of shape (num_frames, num_markers * 3)
-                    # num_frames = rotated_marker_video_data.shape[0]
-                    # num_markers = len(base_markers)
-                    # markers_to_write = np.zeros((num_frames, num_markers * 3))
-                    # marker_names_to_write = []
-                    #
-                    # for i, marker in enumerate(base_markers):
-                    #     x = rotated_marker_video_data[f"{marker}-X"].values
-                    #     y = rotated_marker_video_data[f"{marker}-Y"].values
-                    #     z = rotated_marker_video_data[f"{marker}-Z"].values
-                    #     markers_to_write[:, i * 3] = x
-                    #     markers_to_write[:, i * 3 + 1] = y
-                    #     markers_to_write[:, i * 3 + 2] = z
-                    #     marker_names_to_write.append(marker)
+                    # Plot the marker errors
+                    fig = go.Figure()
+                    fig.add_trace(
+                        go.Bar(
+                            x=list(marker_errors.keys()),
+                            y=list(marker_errors.values()),
+                            name="Marker Errors (mm)",
+                        )
+                    )
+                    fig.add_trace(
+                        go.Scatter(
+                            x=list(marker_errors.keys()),
+                            y=[average_error] * len(marker_errors),
+                            mode="lines",
+                            name="Average Error (mm)",
+                        )
+                    )
+                    fig.update_layout(
+                        title=f"Marker Errors for {movement} (mm)",
+                        xaxis_title="Marker",
+                        yaxis_title="Error (mm)",
+                    )
 
-                    # TODO write the aligned mono data to file _sync.trc
+                    # Save the plot to a file
+                    error_plot_file_name = f"marker_errors_plot_{movement}.html"
+                    error_plot_file_path = os.path.join(error_markers_path, 'errors', error_plot_file_name)
+                    fig.write_html(error_plot_file_path)
+
                     synced_path = marker_video_path.replace(".trc", "_sync.trc")
 
                     trc_mono.convert_to_metric_trc(current_metric='mm', target_metric='m')
                     start_time, end_time = trc_mono.get_start_end_times()
 
-                    print(f"Synced Mono Start Time: {start_time}")
-                    print(f"Synced Mono End Time: {end_time}")
+                    logger.info(f"Synced Mono Start Time: {start_time}")
+                    logger.info(f"Synced Mono End Time: {end_time}")
 
                     mono_synced = transform_from_tuple_array(trc_mono.data)
 
@@ -397,8 +394,17 @@ def main():
                     trc_synced = TRCFile(synced_path)
                     trc_synced_marker_names = trc_synced.get_marker_names()
 
-                    print(f"Wrote synced marker data to: {synced_path}")
-                    print("-" * 50)
+                    logger.info(f"Wrote synced marker data to: {synced_path}")
+
+
+                    from utilsOpenSim import runIKTool
+                    pathOutputMotion = runIKTool(pathGenericSetupFile='/home/selim/opencap-mono/utils/opensim/IK/Setup_IK_SMPL.xml',
+                              pathScaledModel=os.path.join(movement_path, "OpenSim", "Model", folder, "LaiUhlrich2022_scaled.osim"),
+                              pathTRCFile= synced_path,
+                              pathOutputFolder=os.path.join(movement_path, "OpenSim", "IK", "shiftedIK"))
+
+                    logger.info(f"Ran IK on synced data. Results saved to: {pathOutputMotion}")
+                    logger.info("-" * 70)
 
 
 if __name__ == "__main__":
