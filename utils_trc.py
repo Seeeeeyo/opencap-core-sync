@@ -605,6 +605,9 @@ def align_trc_files(trc_mono, trc_mocap, lag):
     # Shift the time vector of trc_mono
     trc_mono.add_time_offset(time_offset)
 
+    # round the time values to 3 decimal places
+    trc_mono.time = np.round(trc_mono.time, 3)
+
     # Trim trc_mono to match the time range of trc_mocap
     mocap_start, mocap_end = trc_mocap.get_start_end_times()
     trc_mono.trim_to_match(mocap_start, mocap_end)
