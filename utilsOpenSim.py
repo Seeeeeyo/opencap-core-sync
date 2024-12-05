@@ -151,71 +151,102 @@ def runScaleTool(pathGenericSetupFile, pathGenericModel, subjectMass,
     return pathOutputModel
     
 # %% Inverse kinematics.
+# def runIKTool(pathGenericSetupFile, pathScaledModel, pathTRCFile,
+#               pathOutputFolder, timeRange=[], IKFileName='not_specified'):
+#
+#     # Paths
+#     if IKFileName == 'not_specified':
+#         _, IKFileName = os.path.split(pathTRCFile)
+#         IKFileName = IKFileName[:-4]
+#     pathOutputMotion = os.path.join(
+#         pathOutputFolder, IKFileName + '.mot')
+#     pathOutputSetup =  os.path.join(
+#         pathOutputFolder, 'Setup_IK_' + IKFileName + '.xml')
+#
+#     # To make IK faster, we remove the patellas and their constraints from the
+#     # model. Constraints make the IK problem more difficult, and the patellas
+#     # are not used in the IK solution for this particular model. Since muscles
+#     # are attached to the patellas, we also remove all muscles.
+#     opensim.Logger.setLevelString('error')
+#     model = opensim.Model(pathScaledModel)
+#     # Remove all actuators.
+#     forceSet = model.getForceSet()
+#     forceSet.setSize(0)
+#     # Remove patellofemoral constraints.
+#     constraintSet = model.getConstraintSet()
+#     patellofemoral_constraints = [
+#         'patellofemoral_knee_angle_r_con', 'patellofemoral_knee_angle_l_con']
+#     for patellofemoral_constraint in patellofemoral_constraints:
+#         i = constraintSet.getIndex(patellofemoral_constraint, 0)
+#         constraintSet.remove(i)
+#     # Remove patella bodies.
+#     bodySet = model.getBodySet()
+#     patella_bodies = ['patella_r', 'patella_l']
+#     for patella in patella_bodies:
+#         i = bodySet.getIndex(patella, 0)
+#         bodySet.remove(i)
+#     # Remove patellofemoral joints.
+#     jointSet = model.getJointSet()
+#     patellofemoral_joints = ['patellofemoral_r', 'patellofemoral_l']
+#     for patellofemoral in patellofemoral_joints:
+#         i = jointSet.getIndex(patellofemoral, 0)
+#         jointSet.remove(i)
+#     # Print the model to a new file.
+#     model.finalizeConnections
+#     model.initSystem()
+#     pathScaledModelWithoutPatella = pathScaledModel.replace('.osim', '_no_patella.osim')
+#     model.printToXML(pathScaledModelWithoutPatella)
+#
+#     # Setup IK tool.
+#     IKTool = opensim.InverseKinematicsTool(pathGenericSetupFile)
+#     IKTool.setName(IKFileName)
+#     IKTool.set_model_file(pathScaledModelWithoutPatella)
+#     IKTool.set_marker_file(pathTRCFile)
+#     if timeRange:
+#         IKTool.set_time_range(0, timeRange[0])
+#         IKTool.set_time_range(1, timeRange[-1])
+#     IKTool.setResultsDir(pathOutputFolder)
+#     IKTool.set_report_errors(True)
+#     IKTool.set_report_marker_locations(False)
+#     IKTool.set_output_motion_file(pathOutputMotion)
+#     IKTool.printToXML(pathOutputSetup)
+#     command = 'opensim-cmd -o error' + ' run-tool ' + pathOutputSetup
+#     os.system(command)
+#
+#     return pathOutputMotion, pathScaledModelWithoutPatella
+#
+#
+
+# %% Inverse kinematics.
 def runIKTool(pathGenericSetupFile, pathScaledModel, pathTRCFile,
               pathOutputFolder, timeRange=[], IKFileName='not_specified'):
-    
     # Paths
     if IKFileName == 'not_specified':
         _, IKFileName = os.path.split(pathTRCFile)
         IKFileName = IKFileName[:-4]
     pathOutputMotion = os.path.join(
         pathOutputFolder, IKFileName + '.mot')
-    pathOutputSetup =  os.path.join(
+    pathOutputSetup = os.path.join(
         pathOutputFolder, 'Setup_IK_' + IKFileName + '.xml')
-    
-    # To make IK faster, we remove the patellas and their constraints from the
-    # model. Constraints make the IK problem more difficult, and the patellas
-    # are not used in the IK solution for this particular model. Since muscles
-    # are attached to the patellas, we also remove all muscles.
-    opensim.Logger.setLevelString('error')
-    model = opensim.Model(pathScaledModel)
-    # Remove all actuators.                                         
-    forceSet = model.getForceSet()
-    forceSet.setSize(0)
-    # Remove patellofemoral constraints.
-    constraintSet = model.getConstraintSet()
-    patellofemoral_constraints = [
-        'patellofemoral_knee_angle_r_con', 'patellofemoral_knee_angle_l_con']
-    for patellofemoral_constraint in patellofemoral_constraints:
-        i = constraintSet.getIndex(patellofemoral_constraint, 0)
-        constraintSet.remove(i)       
-    # Remove patella bodies.
-    bodySet = model.getBodySet()
-    patella_bodies = ['patella_r', 'patella_l']
-    for patella in patella_bodies:
-        i = bodySet.getIndex(patella, 0)
-        bodySet.remove(i)
-    # Remove patellofemoral joints.
-    jointSet = model.getJointSet()
-    patellofemoral_joints = ['patellofemoral_r', 'patellofemoral_l']
-    for patellofemoral in patellofemoral_joints:
-        i = jointSet.getIndex(patellofemoral, 0)
-        jointSet.remove(i)
-    # Print the model to a new file.
-    model.finalizeConnections
-    model.initSystem()
-    pathScaledModelWithoutPatella = pathScaledModel.replace('.osim', '_no_patella.osim')
-    model.printToXML(pathScaledModelWithoutPatella)   
 
-    # Setup IK tool.    
-    IKTool = opensim.InverseKinematicsTool(pathGenericSetupFile)            
+    # Setup IK tool.
+    opensim.Logger.setLevelString('error')
+    IKTool = opensim.InverseKinematicsTool(pathGenericSetupFile)
     IKTool.setName(IKFileName)
-    IKTool.set_model_file(pathScaledModelWithoutPatella)          
+    IKTool.set_model_file(pathScaledModel)
     IKTool.set_marker_file(pathTRCFile)
     if timeRange:
         IKTool.set_time_range(0, timeRange[0])
         IKTool.set_time_range(1, timeRange[-1])
-    IKTool.setResultsDir(pathOutputFolder)                        
+    IKTool.setResultsDir(pathOutputFolder)
     IKTool.set_report_errors(True)
     IKTool.set_report_marker_locations(False)
     IKTool.set_output_motion_file(pathOutputMotion)
     IKTool.printToXML(pathOutputSetup)
-    command = 'opensim-cmd -o error' + ' run-tool ' + pathOutputSetup
+    command = '/home/selim/miniconda3/envs/opencap-mono/bin/opensim-cmd -o error' + ' run-tool ' + pathOutputSetup
     os.system(command)
-    
-    return pathOutputMotion, pathScaledModelWithoutPatella
-    
-    
+
+    return pathOutputMotion
 # %% This function will look for a time window, of a minimum duration specified
 # by thresholdTime, during which the markers move at most by a distance
 # specified by thresholdPosition.
