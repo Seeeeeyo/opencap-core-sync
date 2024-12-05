@@ -1,12 +1,6 @@
-from matplotlib import pyplot as plt
-from utilsChecker import cross_corr_multiple_timeseries
-import pandas as pd
+
 import numpy as np
-from scipy.interpolate import interp1d
-import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from scipy.spatial.transform import Rotation as R
 from utils_trc import write_trc, TRCFile, transform_from_tuple_array, align_trc_files
 import os
 from loguru import logger
@@ -36,12 +30,13 @@ def main():
 
     subjects_dirs = os.listdir(output_path)
 
+    run_ik = True
     single_run = True
     # HARDCODED SUBJECTS
     if single_run:
         hd_subjects_dirs = ['subject2']
         hd_sessions_dirs = ['Session0']
-        hd_cameras = ['Cam2']
+        hd_cameras = ['Cam1']
         hd_movements = ['STSweakLegs1']
         logger.info("Running on a single subject.")
 
@@ -374,7 +369,9 @@ def main():
 
                     synced_path = marker_video_path.replace(".trc", "_sync.trc")
 
-                    trc_mono.convert_to_metric_trc(current_metric='mm', target_metric='m')
+                    # if the original trc mocap file is in meters, convert the mono trc file to meters to be able to visualize them together in opensim
+                    if mocap_metric == 'm':
+                        trc_mono.convert_to_metric_trc(current_metric='mm', target_metric='m')
                     start_time, end_time = trc_mono.get_start_end_times()
 
                     logger.info(f"Synced Mono Start Time: {start_time}")
@@ -396,14 +393,15 @@ def main():
 
                     logger.info(f"Wrote synced marker data to: {synced_path}")
 
+                    if run_ik:
+                        # Run IK on the synced data
+                        from utilsOpenSim import runIKTool
+                        pathOutputMotion = runIKTool(pathGenericSetupFile='/home/selim/opencap-mono/utils/opensim/IK/Setup_IK_SMPL.xml',
+                                  pathScaledModel=os.path.join(movement_path, "OpenSim", "Model", folder, "LaiUhlrich2022_scaled.osim"),
+                                  pathTRCFile= synced_path,
+                                  pathOutputFolder=os.path.join(movement_path, "OpenSim", "IK", "shiftedIK"))
 
-                    from utilsOpenSim import runIKTool
-                    pathOutputMotion = runIKTool(pathGenericSetupFile='/home/selim/opencap-mono/utils/opensim/IK/Setup_IK_SMPL.xml',
-                              pathScaledModel=os.path.join(movement_path, "OpenSim", "Model", folder, "LaiUhlrich2022_scaled.osim"),
-                              pathTRCFile= synced_path,
-                              pathOutputFolder=os.path.join(movement_path, "OpenSim", "IK", "shiftedIK"))
-
-                    logger.info(f"Ran IK on synced data. Results saved to: {pathOutputMotion}")
+                        logger.info(f"Ran IK on synced data. Results saved to: {pathOutputMotion}")
                     logger.info("-" * 70)
 
 
