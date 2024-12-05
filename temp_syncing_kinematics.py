@@ -163,239 +163,260 @@ repo_path = '/home/selim/opencap-mono'
 validation_videos_path = os.path.join(repo_path, 'LabValidation_withVideos1')
 output_path = os.path.join(repo_path, 'output')
 
-subjects_dirs = os.listdir(output_path)
-single_file = False
+single_run = False
+if single_run:
+    hd_subjects_dirs = ['subject2']
+    hd_sessions_dirs = ['Session0']
+    hd_cameras = ['Cam1']
+    hd_movements = ['STSweakLegs1']
+    print("Running on a single subject.")
+
+if single_run:
+    subjects_dirs = hd_subjects_dirs
+
+else:
+    subjects_dirs = os.listdir(output_path)
 
 
+for subject in subjects_dirs:
+    OpenSimDataDir = os.path.join(validation_videos_path, subject, 'OpenSimData')
+    mocap_dir = os.path.join(OpenSimDataDir, 'Mocap', 'IK')
+    subject_path = os.path.join(output_path, subject)
 
-if not single_file:
-    for subject in subjects_dirs:
-        OpenSimDataDir = os.path.join(validation_videos_path, subject, 'OpenSimData')
-        mocap_dir = os.path.join(OpenSimDataDir, 'Mocap', 'IK')
-        subject_path = os.path.join(output_path, subject)
+    if single_run:
+        sessions = hd_sessions_dirs
+    else:
         sessions = os.listdir(subject_path)
 
-        for session in sessions:
+    for session in sessions:
+
+        if single_run:
+            cameras = hd_cameras
+        else:
             cameras = os.listdir(os.path.join(subject_path, session))
 
-            for camera in cameras:
+        for camera in cameras:
+
+            if single_run:
+                movements = hd_movements
+            else:
                 movements = os.listdir(os.path.join(subject_path, session, camera))
 
-                for movement in movements:
-                    mov_path = os.path.join(subject_path, session, camera, movement)
-                    # list the folder in the move path
-                    if not os.path.isdir(mov_path):
-                        continue
-                    # list the folder in the move path
-                    mov_dir = os.listdir(mov_path)
+            for movement in movements:
+                mov_path = os.path.join(subject_path, session, camera, movement)
+                # list the folder in the move path
+                if not os.path.isdir(mov_path):
+                    continue
+                # list the folder in the move path
+                mov_dir = os.listdir(mov_path)
 
-                    if len(mov_dir) == 0:
-                        continue
-                    elif len(mov_dir) == 1:
-                        mov = mov_dir[0]
-                    # if one of the folders contains 'trimmed' in its name, only keep that folder
-                    elif any('trimmed' in folder for folder in mov_dir):
-                        mov = [folder for folder in mov_dir if 'trimmed' in folder][0]
-                    else:
-                        continue
+                if len(mov_dir) == 0:
+                    continue
+                elif len(mov_dir) == 1:
+                    mov = mov_dir[0]
+                # if one of the folders contains 'trimmed' in its name, only keep that folder
+                elif any('trimmed' in folder for folder in mov_dir):
+                    mov = [folder for folder in mov_dir if 'trimmed' in folder][0]
+                else:
+                    continue
 
-                    movement_path = os.path.join(subject_path, session, camera, movement, mov)
-                    openSim_video_path = os.path.join(movement_path, 'OpenSim')
-                    video_ik_path = os.path.join(openSim_video_path, 'IK')
+                movement_path = os.path.join(subject_path, session, camera, movement, mov)
+                openSim_video_path = os.path.join(movement_path, 'OpenSim')
+                video_ik_path = os.path.join(openSim_video_path, 'IK')
 
-                    # if camera == 'Cam1':
-                    #     if 'walking2' in video_ik_path:
-                    #         if session == 'Session1':
-                    #             breakpoint()
+                # if camera == 'Cam1':
+                #     if 'walking2' in video_ik_path:
+                #         if session == 'Session1':
+                #             breakpoint()
 
-                    # if '/home/selim/opencap-mono/output/subject6/Session1/Cam1/walking3/' in video_ik_path:
-                    #     breakpoint()
+                # if '/home/selim/opencap-mono/output/subject6/Session1/Cam1/walking3/' in video_ik_path:
+                #     breakpoint()
 
-                    if not os.path.exists(video_ik_path):
-                        continue
+                if not os.path.exists(video_ik_path):
+                    continue
 
-                    video_dirs = os.listdir(video_ik_path)
+                video_dirs = os.listdir(video_ik_path)
 
-                    shifted_dir = os.path.join(video_ik_path, 'shiftedIK')
-                    if not os.path.exists(shifted_dir):
-                        os.makedirs(shifted_dir)
+                shifted_dir = os.path.join(video_ik_path, 'shiftedIK')
+                if not os.path.exists(shifted_dir):
+                    os.makedirs(shifted_dir)
 
-                    # delete all files in the shifted dir
-                    for file in os.listdir(shifted_dir):
-                        os.remove(os.path.join(shifted_dir, file))
-
-
-                    for video_dir in video_dirs:
-                        video_dir_path = os.path.join(video_ik_path, video_dir)
-                        video_mot_files = [f for f in os.listdir(video_dir_path) if f.endswith('.mot')]
-                        modified_video_mot_files = [f.split('_')[0] + '.mot' for f in video_mot_files]
-
-                        for i, modified_video_file in enumerate(modified_video_mot_files):
-                            if "shifted" in modified_video_file:
-                                continue
-
-                            # TODO take care of the trimmed files
-
-                            video_file = video_mot_files[i]
-                            mocap_file_path = os.path.join(mocap_dir, modified_video_file)
-                            video_file_path = os.path.join(video_dir_path, video_file)
-
-                            if "shifted" in video_file_path:
-                                continue
-
-                            print(f'Mocap file: {mocap_file_path}')
-                            print(f'Video file: {video_file_path}')
-
-                            mocap_data = read_mot_file(mocap_file_path)
-                            video_data = read_mot_file(video_file_path)
-
-                            mocap_df = pd.DataFrame(mocap_data)
-                            video_df = pd.DataFrame(video_data)
-
-                            # Convert the 'time' column to Timedelta and set it as the index
-                            video_df['time_'] = pd.to_timedelta(video_df['time'], unit='s')
-                            video_df = video_df.set_index('time_')
-
-                            # Upsample the data to 100Hz
-                            target_freq = '10ms'  # 100Hz = 10ms intervals
-                            video_df = video_df.resample(target_freq).interpolate(method="linear")
-
-                            # Reset the index to make the time column accessible
-                            video_df = video_df.reset_index()
-
-                            # Convert 'time_' back to seconds
-                            video_df['time'] = video_df['time_'].dt.total_seconds()
-
-                            # # Rearrange the columns, renaming them for clarity
-                            # video_df_100hz_reset = video_df_100hz_reset[['time', 'value']]
-
-                            # round the time column to 2 decimal places
-                            video_df['time'] = video_df['time'].round(2)
-
-                            # delete the time_ column
-                            video_df = video_df.drop(columns=['time_'])
-
-                            mocap_df_untouched = mocap_df.copy()
-                            video_df_untouched_upsampled = video_df.copy()
-
-                            knee_ankle_columns = ['knee_angle_r', 'knee_angle_l']
-                            mocap_knee_ankle = mocap_df[knee_ankle_columns].values.T
-                            video_knee_ankle = video_df[knee_ankle_columns].values.T
+                # delete all files in the shifted dir
+                for file in os.listdir(shifted_dir):
+                    os.remove(os.path.join(shifted_dir, file))
 
 
-                            idx_r_mocap, idx_l_mocap = find_first_45_degrees(mocap_knee_ankle)
-                            idx_r_video, idx_l_video = find_first_45_degrees(video_knee_ankle)
+                for video_dir in video_dirs:
+                    video_dir_path = os.path.join(video_ik_path, video_dir)
+                    video_mot_files = [f for f in os.listdir(video_dir_path) if f.endswith('.mot')]
+                    modified_video_mot_files = [f.split('_')[0] + '.mot' for f in video_mot_files]
 
-                            approximate_lag_right = idx_r_mocap - idx_r_video
-                            approximate_lag_left = idx_l_mocap - idx_l_video
+                    for i, modified_video_file in enumerate(modified_video_mot_files):
+                        if "shifted" in modified_video_file:
+                            continue
 
-                            approximate_lag = (approximate_lag_right + approximate_lag_left) // 2
+                        # TODO take care of the trimmed files
 
+                        video_file = video_mot_files[i]
+                        mocap_file_path = os.path.join(mocap_dir, modified_video_file)
+                        video_file_path = os.path.join(video_dir_path, video_file)
 
-                            print("Y1 is mocap, Y2 is video")
-                            mocap_knee_ankle_padded, video_knee_ankle_padded = pad_signals(mocap_knee_ankle, video_knee_ankle, pad_with='avg')
+                        if "shifted" in video_file_path:
+                            continue
 
-                            max_corr, lag = cross_corr_multiple_timeseries(mocap_knee_ankle_padded, video_knee_ankle_padded,
-                                                                           visualize=False,frameRate=100,multCorrGaussianStd=2000, path=shifted_dir, approximateLag=approximate_lag_right)
+                        print(f'Mocap file: {mocap_file_path}')
+                        print(f'Video file: {video_file_path}')
 
-                            max_corr = round(max_corr, 3)
-                            if max_corr > 0.85:
-                                print(f'Max Correlation: \033[92m{max_corr}\033[0m')
-                            elif max_corr > 0.7:
-                                print(f'Max Correlation: \033[93m{max_corr}\033[0m')
-                            else:
-                                print(f'Max Correlation: \033[91m{max_corr}\033[0m')
+                        mocap_data = read_mot_file(mocap_file_path)
+                        video_data = read_mot_file(video_file_path)
 
-                            print(f'Lag: \033[94m{lag}\033[0m')
+                        mocap_df = pd.DataFrame(mocap_data)
+                        video_df = pd.DataFrame(video_data)
 
-                            shifted_mocap, shifted_video = shift_time_series(mocap_knee_ankle, video_knee_ankle, lag)
+                        # Convert the 'time' column to Timedelta and set it as the index
+                        video_df['time_'] = pd.to_timedelta(video_df['time'], unit='s')
+                        video_df = video_df.set_index('time_')
 
-                            print('Shifted Mocap shape:', shifted_mocap.shape)
-                            print('Shifted Video shape:', shifted_video.shape)
+                        # Upsample the data to 100Hz
+                        target_freq = '10ms'  # 100Hz = 10ms intervals
+                        video_df = video_df.resample(target_freq).interpolate(method="linear")
 
-                            shifted_mocap_df = pd.DataFrame(shifted_mocap.T, columns=knee_ankle_columns)
-                            shifted_video_df = pd.DataFrame(shifted_video.T, columns=knee_ankle_columns)
+                        # Reset the index to make the time column accessible
+                        video_df = video_df.reset_index()
 
-                            single_plot = True
-                            multi_plot = True
+                        # Convert 'time_' back to seconds
+                        video_df['time'] = video_df['time_'].dt.total_seconds()
 
-                            modified_video_file = modified_video_file.split('.')[0]
+                        # # Rearrange the columns, renaming them for clarity
+                        # video_df_100hz_reset = video_df_100hz_reset[['time', 'value']]
 
-                            if single_plot:
-                                fig_s = go.Figure()
-                                fig_s.add_trace(go.Scatter(x=shifted_mocap_df.index, y=shifted_mocap_df['knee_angle_r'], mode='lines', name='Mocap'))
-                                fig_s.add_trace(go.Scatter(x=shifted_mocap_df.index, y=shifted_video_df['knee_angle_r'], mode='lines', name='Video'))
-                                fig_s.update_layout(title=f'Mocap vs Video Knee Angle Right - {movement} - {video_dir}. Lag: {lag} - Correlation: {max_corr}',
-                                                  xaxis_title='Time',
-                                                  yaxis_title='Angle (deg)')
+                        # round the time column to 2 decimal places
+                        video_df['time'] = video_df['time'].round(2)
 
-                                fig_s.write_html(
-                                    os.path.join(shifted_dir, f'lag_correlation_single_{modified_video_file}.html'))
+                        # delete the time_ column
+                        video_df = video_df.drop(columns=['time_'])
 
-                            if multi_plot:
-                                # shifted
-                                fig = make_subplots(rows=4, cols=1, shared_xaxes=True,
-                                                    subplot_titles=knee_ankle_columns)
+                        mocap_df_untouched = mocap_df.copy()
+                        video_df_untouched_upsampled = video_df.copy()
 
-                                for i, sensor in enumerate(knee_ankle_columns, start=1):
-                                    fig.add_trace(
-                                        go.Scatter(x=shifted_mocap_df.index, y=shifted_mocap_df[sensor], mode='lines',
-                                                   name=f'Mocap {sensor}'), row=i, col=1)
-                                    fig.add_trace(
-                                        go.Scatter(x=shifted_mocap_df.index, y=shifted_video_df[sensor], mode='lines',
-                                                   name=f'Video {sensor}'), row=i, col=1)
-
-                                fig.update_layout(title=f'Mocap vs Video Angles - {movement} - {video_dir}. Lag: {lag} - Correlation: {max_corr}',
-                                                  xaxis_title='Index',
-                                                  yaxis_title='Angle (deg)',
-                                                  height=800)
-
-                                fig.write_html(os.path.join(shifted_dir, f'lag_correlation_{modified_video_file}.html'))
+                        knee_ankle_columns = ['knee_angle_r', 'knee_angle_l']
+                        mocap_knee_ankle = mocap_df[knee_ankle_columns].values.T
+                        video_knee_ankle = video_df[knee_ankle_columns].values.T
 
 
-                                # Unshifted
-                                fig = make_subplots(rows=4, cols=1, shared_xaxes=True,
-                                                    subplot_titles=knee_ankle_columns)
+                        idx_r_mocap, idx_l_mocap = find_first_45_degrees(mocap_knee_ankle)
+                        idx_r_video, idx_l_video = find_first_45_degrees(video_knee_ankle)
 
-                                for i, sensor in enumerate(knee_ankle_columns, start=1):
-                                    fig.add_trace(
-                                        go.Scatter(x=mocap_df_untouched.index, y=mocap_df_untouched[sensor], mode='lines',
-                                                   name=f'Mocap {sensor}'), row=i, col=1)
-                                    fig.add_trace(
-                                        go.Scatter(x=video_df_untouched_upsampled.index, y=video_df_untouched_upsampled[sensor], mode='lines',
-                                                   name=f'Video {sensor}'), row=i, col=1)
+                        approximate_lag_right = idx_r_mocap - idx_r_video
+                        approximate_lag_left = idx_l_mocap - idx_l_video
 
-                                fig.update_layout(
-                                    title=f'Mocap vs Video Angles (Unshifted) - {movement} - {video_dir}. Lag: {lag} - Correlation: {max_corr}',
-                                    xaxis_title='Index',
-                                    yaxis_title='Angle (deg)',
-                                    height=800)
+                        approximate_lag = (approximate_lag_right + approximate_lag_left) // 2
 
-                                fig.write_html(
-                                    os.path.join(shifted_dir, f'unshifted_lag_correlation_{modified_video_file}.html'))
 
-                                # padded
-                                fig = make_subplots(rows=4, cols=1, shared_xaxes=True,
-                                                    subplot_titles=knee_ankle_columns)
-                                for i, sensor in enumerate(knee_ankle_columns, start=1):
-                                    fig.add_trace(
-                                        go.Scatter(x=np.arange(mocap_knee_ankle_padded.shape[1]), y=mocap_knee_ankle_padded[i - 1],
-                                                   mode='lines',
-                                                   name=f'Mocap {sensor}'), row=i, col=1)
-                                    fig.add_trace(
-                                        go.Scatter(x=np.arange(video_knee_ankle_padded.shape[1]), y=video_knee_ankle_padded[i - 1],
-                                                   mode='lines',
-                                                   name=f'Video {sensor}'), row=i, col=1)
-                                    # save the plot
-                                fig.update_layout(
-                                    title=f'Mocap vs Video Angles (Padded) - {movement} - {video_dir}. Lag: {lag} - Correlation: {max_corr}',
-                                    xaxis_title='Index',
-                                    yaxis_title='Angle (deg)',
-                                    height=800)
-                                fig.write_html(
-                                    os.path.join(shifted_dir, f'padded_{modified_video_file}.html'))
+                        print("Y1 is mocap, Y2 is video")
+                        mocap_knee_ankle_padded, video_knee_ankle_padded = pad_signals(mocap_knee_ankle, video_knee_ankle, pad_with='avg')
 
-                            with open(os.path.join(shifted_dir, f'lag_correlation_{modified_video_file}.txt'), 'w') as f:
-                                f.write(f'Lag: {lag}\nCorrelation: {max_corr}\nAproximate Lag: {approximate_lag}\nright_knee_45_mocap: {idx_r_mocap}\nleft_knee_45_mocap: {idx_l_mocap}\nright_knee_45_video: {idx_r_video}\nleft_knee_45_video: {idx_l_video}')
+                        max_corr, lag = cross_corr_multiple_timeseries(mocap_knee_ankle_padded, video_knee_ankle_padded,
+                                                                       visualize=False,frameRate=100,multCorrGaussianStd=2000, path=shifted_dir, approximateLag=approximate_lag_right)
 
-                            print('--------------------------------------------')
+                        max_corr = round(max_corr, 3)
+                        if max_corr > 0.85:
+                            print(f'Max Correlation: \033[92m{max_corr}\033[0m')
+                        elif max_corr > 0.7:
+                            print(f'Max Correlation: \033[93m{max_corr}\033[0m')
+                        else:
+                            print(f'Max Correlation: \033[91m{max_corr}\033[0m')
+
+                        print(f'Lag: \033[94m{lag}\033[0m')
+
+                        shifted_mocap, shifted_video = shift_time_series(mocap_knee_ankle, video_knee_ankle, lag)
+
+                        print('Shifted Mocap shape:', shifted_mocap.shape)
+                        print('Shifted Video shape:', shifted_video.shape)
+
+                        shifted_mocap_df = pd.DataFrame(shifted_mocap.T, columns=knee_ankle_columns)
+                        shifted_video_df = pd.DataFrame(shifted_video.T, columns=knee_ankle_columns)
+
+                        single_plot = True
+                        multi_plot = True
+
+                        modified_video_file = modified_video_file.split('.')[0]
+
+                        if single_plot:
+                            fig_s = go.Figure()
+                            fig_s.add_trace(go.Scatter(x=shifted_mocap_df.index, y=shifted_mocap_df['knee_angle_r'], mode='lines', name='Mocap'))
+                            fig_s.add_trace(go.Scatter(x=shifted_mocap_df.index, y=shifted_video_df['knee_angle_r'], mode='lines', name='Video'))
+                            fig_s.update_layout(title=f'Mocap vs Video Knee Angle Right - {movement} - {video_dir}. Lag: {lag} - Correlation: {max_corr}',
+                                              xaxis_title='Time',
+                                              yaxis_title='Angle (deg)')
+
+                            fig_s.write_html(
+                                os.path.join(shifted_dir, f'lag_correlation_single_{modified_video_file}.html'))
+
+                        if multi_plot:
+                            # shifted
+                            fig = make_subplots(rows=4, cols=1, shared_xaxes=True,
+                                                subplot_titles=knee_ankle_columns)
+
+                            for i, sensor in enumerate(knee_ankle_columns, start=1):
+                                fig.add_trace(
+                                    go.Scatter(x=shifted_mocap_df.index, y=shifted_mocap_df[sensor], mode='lines',
+                                               name=f'Mocap {sensor}'), row=i, col=1)
+                                fig.add_trace(
+                                    go.Scatter(x=shifted_mocap_df.index, y=shifted_video_df[sensor], mode='lines',
+                                               name=f'Video {sensor}'), row=i, col=1)
+
+                            fig.update_layout(title=f'Mocap vs Video Angles - {movement} - {video_dir}. Lag: {lag} - Correlation: {max_corr}',
+                                              xaxis_title='Index',
+                                              yaxis_title='Angle (deg)',
+                                              height=800)
+
+                            fig.write_html(os.path.join(shifted_dir, f'lag_correlation_{modified_video_file}.html'))
+
+
+                            # Unshifted
+                            fig = make_subplots(rows=4, cols=1, shared_xaxes=True,
+                                                subplot_titles=knee_ankle_columns)
+
+                            for i, sensor in enumerate(knee_ankle_columns, start=1):
+                                fig.add_trace(
+                                    go.Scatter(x=mocap_df_untouched.index, y=mocap_df_untouched[sensor], mode='lines',
+                                               name=f'Mocap {sensor}'), row=i, col=1)
+                                fig.add_trace(
+                                    go.Scatter(x=video_df_untouched_upsampled.index, y=video_df_untouched_upsampled[sensor], mode='lines',
+                                               name=f'Video {sensor}'), row=i, col=1)
+
+                            fig.update_layout(
+                                title=f'Mocap vs Video Angles (Unshifted) - {movement} - {video_dir}. Lag: {lag} - Correlation: {max_corr}',
+                                xaxis_title='Index',
+                                yaxis_title='Angle (deg)',
+                                height=800)
+
+                            fig.write_html(
+                                os.path.join(shifted_dir, f'unshifted_lag_correlation_{modified_video_file}.html'))
+
+                            # padded
+                            fig = make_subplots(rows=4, cols=1, shared_xaxes=True,
+                                                subplot_titles=knee_ankle_columns)
+                            for i, sensor in enumerate(knee_ankle_columns, start=1):
+                                fig.add_trace(
+                                    go.Scatter(x=np.arange(mocap_knee_ankle_padded.shape[1]), y=mocap_knee_ankle_padded[i - 1],
+                                               mode='lines',
+                                               name=f'Mocap {sensor}'), row=i, col=1)
+                                fig.add_trace(
+                                    go.Scatter(x=np.arange(video_knee_ankle_padded.shape[1]), y=video_knee_ankle_padded[i - 1],
+                                               mode='lines',
+                                               name=f'Video {sensor}'), row=i, col=1)
+                                # save the plot
+                            fig.update_layout(
+                                title=f'Mocap vs Video Angles (Padded) - {movement} - {video_dir}. Lag: {lag} - Correlation: {max_corr}',
+                                xaxis_title='Index',
+                                yaxis_title='Angle (deg)',
+                                height=800)
+                            fig.write_html(
+                                os.path.join(shifted_dir, f'padded_{modified_video_file}.html'))
+
+                        with open(os.path.join(shifted_dir, f'lag_correlation_{modified_video_file}.txt'), 'w') as f:
+                            f.write(f'Lag: {lag}\nCorrelation: {max_corr}\nAproximate Lag: {approximate_lag}\nright_knee_45_mocap: {idx_r_mocap}\nleft_knee_45_mocap: {idx_l_mocap}\nright_knee_45_video: {idx_r_video}\nleft_knee_45_video: {idx_l_video}')
+
+                        print('--------------------------------------------')
