@@ -31,7 +31,7 @@ def main():
     subjects_dirs = os.listdir(output_path)
 
     run_ik = True
-    single_run = True
+    single_run = False
     # HARDCODED SUBJECTS
     if single_run:
         hd_subjects_dirs = ['subject2']
@@ -372,6 +372,8 @@ def main():
                     # if the original trc mocap file is in meters, convert the mono trc file to meters to be able to visualize them together in opensim
                     if mocap_metric == 'm':
                         trc_mono.convert_to_metric_trc(current_metric='mm', target_metric='m')
+                        logger.info(f"Converted synced mono markers from mm to m to match mocap markers unit.")
+
                     start_time, end_time = trc_mono.get_start_end_times()
 
                     logger.info(f"Synced Mono Start Time: {start_time}")
