@@ -9,6 +9,22 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 
+
+repo_path = '/home/selim/opencap-mono'
+validation_videos_path = os.path.join(repo_path, 'LabValidation_withVideos1')
+output_path = os.path.join(repo_path, 'output')
+
+single_run = True
+if single_run:
+    hd_subjects_dirs = ['subject3']
+    hd_sessions_dirs = ['Session1']
+    hd_cameras = ['Cam1']
+    hd_movements = ['walking3']
+    print("Running on a single subject.")
+
+
+
+
 def read_mot_file(file_path):
     with open(file_path, 'r') as file:
         lines = file.readlines()
@@ -123,28 +139,6 @@ def find_first_45_degrees(Y):
 
     return idx_r, idx_l
 
-# def shift_time_series(Y1, Y2, lag):
-#     # shift the video data by the lag
-#     shifted_Y2 = np.empty_like(Y1)
-#     shifted_Y2[:] = np.nan
-#     shifted_Y2 =
-
-
-# def shift_time_series(Y1, Y2, lag):
-#     if lag > 0:
-#         shifted_Y2 = np.roll(Y2, lag, axis=1)
-#         shifted_Y2[:, :lag] = np.nan  # Set wrapped-around values to NaN
-#         shifted_Y1 = Y1
-#     elif lag < 0:
-#         shifted_Y1 = np.roll(Y1, -lag, axis=1)
-#         shifted_Y1[:, :abs(lag)] = np.nan  # Set wrapped-around values to NaN
-#         shifted_Y2 = Y2
-#     else:
-#         shifted_Y1 = Y1
-#         shifted_Y2 = Y2
-#     return shifted_Y1, shifted_Y2
-
-
 def shift_time_series(Y1, Y2, lag):
     if lag > 0:
         shifted_Y2 = np.roll(Y2, lag, axis=1)
@@ -159,17 +153,22 @@ def shift_time_series(Y1, Y2, lag):
     return shifted_Y1, shifted_Y2
 
 
-repo_path = '/home/selim/opencap-mono'
-validation_videos_path = os.path.join(repo_path, 'LabValidation_withVideos1')
-output_path = os.path.join(repo_path, 'output')
 
-single_run = False
-if single_run:
-    hd_subjects_dirs = ['subject2']
-    hd_sessions_dirs = ['Session0']
-    hd_cameras = ['Cam1']
-    hd_movements = ['STSweakLegs1']
-    print("Running on a single subject.")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 if single_run:
     subjects_dirs = hd_subjects_dirs
@@ -247,6 +246,8 @@ for subject in subjects_dirs:
 
 
                 for video_dir in video_dirs:
+                    if 'wham_result' in video_dir:
+                        continue
                     video_dir_path = os.path.join(video_ik_path, video_dir)
                     video_mot_files = [f for f in os.listdir(video_dir_path) if f.endswith('.mot')]
                     modified_video_mot_files = [f.split('_')[0] + '.mot' for f in video_mot_files]
@@ -254,8 +255,6 @@ for subject in subjects_dirs:
                     for i, modified_video_file in enumerate(modified_video_mot_files):
                         if "shifted" in modified_video_file:
                             continue
-
-                        # TODO take care of the trimmed files
 
                         video_file = video_mot_files[i]
                         mocap_file_path = os.path.join(mocap_dir, modified_video_file)
@@ -416,7 +415,11 @@ for subject in subjects_dirs:
                             fig.write_html(
                                 os.path.join(shifted_dir, f'padded_{modified_video_file}.html'))
 
-                        with open(os.path.join(shifted_dir, f'lag_correlation_{modified_video_file}.txt'), 'w') as f:
-                            f.write(f'Lag: {lag}\nCorrelation: {max_corr}\nAproximate Lag: {approximate_lag}\nright_knee_45_mocap: {idx_r_mocap}\nleft_knee_45_mocap: {idx_l_mocap}\nright_knee_45_video: {idx_r_video}\nleft_knee_45_video: {idx_l_video}')
+                        lag_file = os.path.join(shifted_dir, f'lag_correlation_{modified_video_file}.txt')
 
+                        with open((lag_file), 'w') as f:
+                            f.write(f'Lag: {lag}\nCorrelation: {max_corr}\nAproximate Lag: {approximate_lag}\nright_knee_45_mocap: {idx_r_mocap}\nleft_knee_45_mocap: {idx_l_mocap}\nright_knee_45_video: {idx_r_video}\nleft_knee_45_video: {idx_l_video}')
+                        print(f'Lag and correlation values written to {lag_file}')
                         print('--------------------------------------------')
+
+
