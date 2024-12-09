@@ -1,4 +1,3 @@
-import sys
 import os
 import pandas as pd
 from utils_mot import load_mot
@@ -19,7 +18,8 @@ mot_paths = {
     # "wham_opt": "/home/selim/opencap-mono/LabValidation_withVideos1/subject3/OpenSimData/IK",
 }
 
-# load the .mot files into a dict of pandas dataframes indexec by the keys of mot_paths
+output_path = os.path.join(root_path, 'output/subject3/Session0/Cam1/STS1/STS1/OpenSim/IK/shiftedIK/')
+
 mot_data = {
     key: load_mot(os.path.join(root_path, mot_paths[key]))
     for key in mot_paths.keys()
@@ -40,6 +40,8 @@ assert mocap.shape[0] == mono.shape[0], "Lengths do not match"
 # find the common columns between the two dataframes
 common_columns = list(set(mocap.columns).intersection(mono.columns))
 
+common_columns.remove("time")
+
 # for each common_columns, calculate the mean squared error
 mse_global = 0
 for col in common_columns:
@@ -52,4 +54,9 @@ mse_global = np.round(mse_global, 1)
 
 print(f"Global MSE: {mse_global} degrees.")
 
-
+# write the results to a file
+with open(os.path.join(output_path, 'translation_error.txt'), 'w') as f:
+    f.write(f"Global MSE: {mse_global} degrees.\n")
+    for col in common_columns:
+        mse = np.round(((mocap[col] - mono[col]) ** 2).mean(),1)
+        f.write(f"{col}: {mse} degrees.\n")
