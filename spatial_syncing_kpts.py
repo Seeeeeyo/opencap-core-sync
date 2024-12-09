@@ -31,13 +31,14 @@ def main():
     subjects_dirs = os.listdir(output_path)
 
     run_ik = True
-    single_run = False
+    single_run = True
+
     # HARDCODED SUBJECTS
     if single_run:
-        hd_subjects_dirs = ['subject2']
-        hd_sessions_dirs = ['Session0']
+        hd_subjects_dirs = ['subject3']
+        hd_sessions_dirs = ['Session1']
         hd_cameras = ['Cam1']
-        hd_movements = ['STSweakLegs1']
+        hd_movements = ['walking3']
         logger.info("Running on a single subject.")
 
     if single_run:
@@ -68,9 +69,28 @@ def main():
                     movements = os.listdir(os.path.join(subject_path, session, camera))
 
                 for movement in movements:
-                    movement_path = os.path.join(
-                        subject_path, session, camera, movement, movement
+                    movement_folder = os.path.join(
+                        subject_path, session, camera, movement
                     )
+                    # list the folders in movement_folder
+                    movement_folders = os.listdir(movement_folder)
+
+                    # if the movement folder is empty, continue
+                    if not movement_folders:
+                        logger.info(f"Skipping {movement_folder} as it is empty.")
+                        continue
+
+                    # if there are multiple folders in the movement folder, get the one with 'trimmed' in the name
+                    if len(movement_folders) > 1:
+                        trimmed = next((d for d in movement_folders if 'trimmed' in d), None)
+                        if movement_folder is None:
+                            logger.info(f"Skipping {movement_folder} as it is empty.")
+                            # continue
+                        movement_path = os.path.join(movement_folder, trimmed)
+                    else:
+                        movement_path = os.path.join(movement_folder, movement_folders[0])
+
+
                     marker_video_path = os.path.join(movement_path, "MarkerData")
                     error_markers_path = os.path.join(movement_path, "MarkerData")
                     if not os.path.exists(marker_video_path):
@@ -85,10 +105,12 @@ def main():
                     logger.info(f"Filepath: {marker_video_path}")
 
                     # get the folder in marker_video_subdirs list, it doesnt have any extension
-                    folder = next((d for d in marker_video_subdirs if '.' not in d), None)
+                    # folder = next((d for d in marker_video_subdirs if '.' not in d), None)
+                    folder = next((d for d in marker_video_subdirs if '.' not in d and 'wham_result' not in d), None)
 
                     if folder is None:
                         continue
+
 
                     marker_video_path = os.path.join(marker_video_path, folder)
                     marker_video_files = [
@@ -197,7 +219,6 @@ def main():
 
 
                     # Rotational alignment
-
                     trc_mocap_trimmed = trc_mocap.copy()
                     trc_mocap_trimmed.trim_to_match(mono_start, mono_end)
 
@@ -272,6 +293,9 @@ def main():
                     # Collect offsets for all markers
                     offsets_x, offsets_y, offsets_z = [], [], []
 
+                    # if 'walking' in movement then take the hal length index to calculate the offset
+                    idx = 0
+                    
                     # Loop through each marker to calculate offsets
                     for mono_marker, mocap_marker in markers.items():
                         assert trc_mono.marker_exists(
@@ -282,9 +306,10 @@ def main():
                         mono_data = trc_mono.marker(mono_marker)
                         mocap_data = trc_mocap_trimmed.marker(mocap_marker)
 
-                        offsets_x.append(mocap_data[0, 0] - mono_data[0, 0])
-                        offsets_y.append(mocap_data[0, 1] - mono_data[0, 1])
-                        offsets_z.append(mocap_data[0, 2] - mono_data[0, 2])
+                        offsets_x.append(mocap_data[idx, 0] - mono_data[0, 0])
+                        offsets_y.append(mocap_data[idx, 1] - mono_data[0, 1])
+                        offsets_z.append(mocap_data[idx, 2] - mono_data[0, 2])
+
 
                     # Calculate average offsets
                     avg_x_offset = np.mean(offsets_x)
@@ -304,6 +329,27 @@ def main():
                     # Compute the mean per marker error for each marker. This is just the 2 norm /Euclidian distance. Compute the average error over all markers.
                     # first find the common markers using regex. e.g r-knee-X is the same as r.knee-X or knee.r-X
                     # then compute the error for each marker
+
+                    # compute the marker error for the shoulders at the first frame in the z axis
+                    right_shoulder_error = trc_mono.marker("r_shoulder")[0, 2] - trc_mocap_trimmed.marker("R_Shoulder")[0, 2]
+                    logger.info(f"Right shoulder Error: {right_shoulder_error:.2f} mm")
+                    left_shoulder_error = trc_mono.marker("l_shoulder")[0, 2] - trc_mocap_trimmed.marker("L_Shoulder")[0, 2]
+                    logger.info(f"Left shoulder Error: {left_shoulder_error:.2f} mm")
+
+                    # print the z distance between left and right shoulders
+                    shoulder_distance_mono = np.abs(trc_mono.marker("r_shoulder")[0, 2] - trc_mono.marker("l_shoulder")[0, 2])
+                    shoulder_distance_mocap = np.abs(trc_mocap_trimmed.marker("R_Shoulder")[0, 2] - trc_mocap_trimmed.marker("L_Shoulder")[0, 2])
+                    logger.info(f"Shoulder Distance Mono: {shoulder_distance_mono:.2f} mm")
+                    logger.info(f"Shoulder Distance Mocap: {shoulder_distance_mocap:.2f} mm")
+                    # print the difference between the two distances
+                    shoulder_distance_error = shoulder_distance_mocap - shoulder_distance_mono
+                    logger.info(f"Shoulder Distance Error: {shoulder_distance_error:.2f} mm")
+
+                    # apply offset to the mono trc file for the shoulders
+                    # trc_mono.offset(axis='z', value=right_shoulder_error, single_marker='r_shoulder')
+                    # trc_mono.offset(axis='z', value=left_shoulder_error, single_marker='l_shoulder')
+                    # logger.info(f"Applied offset to the mono trc file for the shoulders.")
+
 
                     # Compute the mean per marker error for each marker
                     marker_errors = {}
@@ -370,9 +416,9 @@ def main():
                     synced_path = marker_video_path.replace(".trc", "_sync.trc")
 
                     # if the original trc mocap file is in meters, convert the mono trc file to meters to be able to visualize them together in opensim
-                    if mocap_metric == 'm':
-                        trc_mono.convert_to_metric_trc(current_metric='mm', target_metric='m')
-                        logger.info(f"Converted synced mono markers from mm to m to match mocap markers unit.")
+                    # if mocap_metric == 'm':
+                    #     trc_mono.convert_to_metric_trc(current_metric='mm', target_metric='m')
+                    #     logger.info(f"Converted synced mono markers from mm to m to match mocap markers unit.")
 
                     start_time, end_time = trc_mono.get_start_end_times()
 
@@ -386,6 +432,7 @@ def main():
                         pathOutputFile=synced_path,
                         keypointNames=trc_mono_marker_names,
                         frameRate=frame_rate,
+                        unit='mm',
                         t_start=start_time,
                     )
 
@@ -398,8 +445,9 @@ def main():
                     if run_ik:
                         # Run IK on the synced data
                         from utilsOpenSim import runIKTool
+                        # TODO use a model without patella to run IK faster for now
                         pathOutputMotion = runIKTool(pathGenericSetupFile='/home/selim/opencap-mono/utils/opensim/IK/Setup_IK_SMPL.xml',
-                                  pathScaledModel=os.path.join(movement_path, "OpenSim", "Model", folder, "LaiUhlrich2022_scaled.osim"),
+                                  pathScaledModel=os.path.join(movement_path, "OpenSim", "Model", folder, "LaiUhlrich2022_withMarkers_scaled_no_patella.osim"),
                                   pathTRCFile= synced_path,
                                   pathOutputFolder=os.path.join(movement_path, "OpenSim", "IK", "shiftedIK"))
 
