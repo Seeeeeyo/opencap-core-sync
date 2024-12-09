@@ -285,21 +285,36 @@ class TRCFile(object):
             self.data[self.marker_names[imarker] + '_ty'] = temp_rot[:, 1]
             self.data[self.marker_names[imarker] + '_tz'] = temp_rot[:, 2]
 
-    def offset(self, axis, value):
+    def offset(self, axis, value, single_marker=None):
         """ offset the data.
 
             axis : rotation axis
             value : offset in m
         """
-        for imarker in range(self.num_markers):
-            if axis.lower() == 'x':
-                self.data[self.marker_names[imarker] + '_tx'] += value
-            elif axis.lower() == 'y':
-                self.data[self.marker_names[imarker] + '_ty'] += value
-            elif axis.lower() == 'z':
-                self.data[self.marker_names[imarker] + '_tz'] += value
+        if single_marker is not None:
+            if single_marker not in self.marker_names:
+                raise ValueError("Marker not found")
             else:
-                raise ValueError("Axis not recognized")
+                marker_idx = self.marker_names.index(single_marker)
+                if axis.lower() == 'x':
+                    self.data[self.marker_names[marker_idx] + '_tx'] += value
+                elif axis.lower() == 'y':
+                    self.data[self.marker_names[marker_idx] + '_ty'] += value
+                elif axis.lower() == 'z':
+                    self.data[self.marker_names[marker_idx] + '_tz'] += value
+                else:
+                    raise ValueError("Axis not recognized")
+        else:
+            for imarker in range(self.num_markers):
+                if axis.lower() == 'x':
+                    self.data[self.marker_names[imarker] + '_tx'] += value
+                elif axis.lower() == 'y':
+                    self.data[self.marker_names[imarker] + '_ty'] += value
+                elif axis.lower() == 'z':
+                    self.data[self.marker_names[imarker] + '_tz'] += value
+                else:
+                    raise ValueError("Axis not recognized")
+
 
     def resample_trc(self, target_frequency=100):
         """
